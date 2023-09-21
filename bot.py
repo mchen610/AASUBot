@@ -32,10 +32,10 @@ def main():
 
     for event in events:
         name = event['summary']
-        start = date_parse(event['start'].get('date')).strftime('%b-%d')
-        end = (date_parse(event['end'].get('date'))-timedelta(days=1)).strftime('%b-%d')
+        start = event['start'].get('date')
+        end = (date_parse(event['end'].get('date'))-timedelta(days=1)).strftime('%Y-%m-%d')
         if start != end:
-            end = ' - ' + end
+            end = ' **-** ' + end
         else:
             end = ''
         newEvent = {'name': name, 'start': start, 'end': end}
