@@ -1,21 +1,36 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 
-from datetime import date, datetime, timedelta 
+from datetime import date, datetime, timedelta
 from dateutil.parser import parse as date_parse
+from pytz import timezone
 
 from googleapiclient.discovery import build
 
-API_KEY = 'AIzaSyB-iPQzUWjNvGh4RMn3lxOfmzvF32LT150'
+import os
+import json
+
+from twilio.rest import Client
+
+API_KEY = os.environ['GOOGLE_CALENDAR_API_KEY']
+print(os.environ)
 
 allEvents: list[dict[str, str]] = [];
 suborgEvents: dict = {'AASU': [], 'CASA': [], 'HEAL': [], 'KUSA': [], 'FSA': [], 'FLP': [], 'VSO': []};
 
-def main():
+intents = discord.Intents.default()
+intents.members = True
+intents.message_content = True 
+
+bot = commands.Bot(command_prefix='!', intents=intents, activity=discord.Activity(type=3, name="!help"), status=discord.Status.online)
+bot.remove_command('help')
+
+@tasks.loop(hours=24.0)
+async def get_events():
 
     service = build('calendar', 'v3', developerKey=API_KEY)
 
-    today = datetime.today()
+    today = datetime.utcnow()
     print(today)
     today.replace(hour=0, minute=0, second=0, microsecond=0)
     inOneMonth = today + timedelta(days=30)
@@ -34,10 +49,6 @@ def main():
         name = event['summary']
         start = event['start'].get('date')
         end = (date_parse(event['end'].get('date'))-timedelta(days=1)).strftime('%Y-%m-%d')
-        if start != end:
-            end = ' **-** ' + end
-        else:
-            end = ''
         newEvent = {'name': name, 'start': start, 'end': end}
 
         allEvents.append(newEvent)
@@ -45,24 +56,83 @@ def main():
             if org in name:
                 suborgEvents[org].append(newEvent)
 
+async def get_daily_sms():
+    msg = "No events today!";
+    tomorrow = date.today()+timedelta(days=1)
+    eventList = [event for event in allEvents if (datetime.strptime(event['start'], '%Y-%m-%d').date()<=tomorrow)]
+    if len(eventList) > 0:
+        msg = "IMMEDIATE EVENTS\n"
+        for event in eventList:
+            msg = msg+'\n'+event['start'][5:]
+            if event['end']!=event['start']:
+                msg = msg + " ➾ " + event['end'][5:]
+            msg = msg + ": " + event['name']
+    return msg
 
 
+@tasks.loop(hours=24.0)
+async def send_daily_sms():
 
-if __name__ == '__main__':
-    main()
+    account_sid = os.environ['TWILIO_ACCOUNT_SID']
+    auth_token = os.environ['TWILIO_AUTH_TOKEN']
 
+    client = Client(account_sid, auth_token)
+    
+    msg = await get_daily_sms()
+    with open('numbers.json', 'r+') as file:
+        data = json.load(file)
+        valid_numbers = []
+        for number in data['numbers']:
+            try:
+                client.messages \
+                    .create(
+                        body=msg,
+                        from_ =  "+18336331775",
+                        to = number
+                    )
+                valid_numbers.append(number)
+            except:
+                if number not in data['invalid_numbers']:
+                    data['invalid_numbers'].append(number)
+        data['numbers'] = valid_numbers
+        file.seek(0)
+        json.dump(data, file, indent=4)
+        file.truncate()
 
+async def get_daily_discord():
+    msg = "__No events today!__";
+    tomorrow = date.today()+timedelta(days=1)
+    eventList = [event for event in allEvents if (datetime.strptime(event['start'], '%Y-%m-%d').date()<=tomorrow)]
+    if len(eventList) > 0:
+        msg = "__**IMMEDIATE EVENTS**__\n"
+        for event in eventList:
+                    msg = msg+'\n*'+event['start']
+                    if event['end']!=event['start']:
+                        msg = msg + " **-** " + event['end']
+                    msg = msg + f"* **{event['name']}**"
+    return msg
 
-intents = discord.Intents.default()
-intents.members = True
-intents.message_content = True 
+@tasks.loop(hours=24.0)
+async def send_daily_discord():
+    msg = await get_daily_discord()
+    with open('discord_users.json', 'r+') as file:
+        data = json.load(file)
+        for username in data['usernames']:
+            user = discord.utils.get(bot.users, name=username)
+            if user:
+                await user.send(msg)
+                print('hi')
+            else:
+                print('wtf')
 
-bot = commands.Bot(command_prefix='!', intents=intents, activity=discord.Activity(type=3, name="!help"), status=discord.Status.online)
-bot.remove_command('help')
+    pass
 
 @bot.event
 async def on_ready():
-    print(f"Logged in as {bot.user}")  
+    print(f"Logged in as {bot.user}") 
+    get_events.start()
+    send_daily_sms.start()
+    send_daily_discord.start()
 
 
 @bot.command()
@@ -84,43 +154,32 @@ async def events(ctx, *args):
     if len(eventList) == 0:
         eventList = allEvents
         heading = "ALL AASU EVENTS"
-    
-    today = date.today()
-    tomorrow = today+timedelta(1)
-    inOneWeek = today+timedelta(7)
 
 
-    if "TODAY" in args:
-        eventList = [event for event in eventList if event['start']==str(today)]
-        print(eventList)
-        if len(eventList) == 0:
-            heading = "No events today!"
-        else:
-            heading = heading + " " + "TODAY"
-            
+    timeframes = {"TODAY": date.today(), "TOMORROW": date.today()+timedelta(1), "WEEK": date.today()+timedelta(7)}
+    numTimeFrames = 0;
+    for timeframe in timeframes: 
+        if timeframe in args:
+            if numTimeFrames > 0:
+                ctx.send("Please only enter one timeframe!")
+                break
+            numTimeFrames+=1
+            eventList = [event for event in eventList if (datetime.strptime(event['start'], '%Y-%m-%d').date()<=timeframes[timeframe])]
+            human_str = timeframe
+            human_str = human_str.replace("WEEK", "THIS WEEK")
+            if len(eventList) == 0:
+                ctx.send(f"No events {human_str.lower()}!")
+            else:
+                heading = heading + " " + human_str
         
-        
-    elif "TOMORROW" in args:
-        eventList = [event for event in eventList if event['start']==str(tomorrow)]
-        if len(eventList) == 0:
-            heading = "No events tomorrow!"
-        else:
-            heading = heading + " " + "TOMORROW"
-
-    elif "WEEK" in args:
-        eventList = [event for event in eventList if event['start']<str(inOneWeek)]
-        if len(eventList) == 0:
-            heading = "No events this week!"
-        else:
-            heading = heading + " " + "THIS WEEK"
-
-    if len(eventList) > 0:
-        heading = f"__**{heading}**__"
-
-    await ctx.send(heading)
-
-    for event in eventList:
-        await ctx.send(f"*{event['start']+event['end']}* **{event['name']}**")
+    if len(eventList) > 0 and numTimeFrames==1:
+        msg = f"__**{heading}**__\n"  
+        for event in eventList:
+            msg = msg+'\n*'+event['start']
+            if event['end']!=event['start']:
+                msg = msg + " **-** " + event['end']
+            msg = msg + f"* **{event['name']}**"
+            await ctx.send(msg)
 
 @bot.command()
 async def calendar(ctx):
@@ -137,6 +196,18 @@ async def help(ctx):
 **Suborgs**: AASU, CASA, HEAL, KUSA, FSA, FLP, VSO
 **Timeframes**: today, tomorrow, week
 ''')
+    
+@bot.command()
+async def subscribe(ctx):
+    user = ctx.author
+    print(user.name, user.id)
+    with open('discord_users.json', 'r+') as file:
+        data = json.load(file)
+        data['usernames'].append(user.name)
+        file.seek(0)
+        json.dump(data, file, indent=4)
+        file.truncate()
+
 
 
 bot.run("MTE1MjQ0NzU0ODg3NTg3ODUzMA.G0wcx7.l_GVcVLT7x2FOAyML-9Ulkdps32Uj0W6PHEZos")
