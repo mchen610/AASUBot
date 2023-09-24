@@ -148,8 +148,8 @@ async def events(ctx, *args):
         args[i] = args[i].upper()
     print(args)
 
-    for org in set(args) & set(suborgEvents):
-        eventList = eventList + suborgEvents[org]
+    for org in set(args) & set(subOrgEvents):
+        eventList = eventList + subOrgEvents[org]
         heading = org+" "+heading
 
     eventList.sort(key=lambda x: x['start'])
