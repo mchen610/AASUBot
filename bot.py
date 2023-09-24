@@ -26,6 +26,8 @@ bot.remove_command('help')
 
 @tasks.loop(hours=24.0)
 async def get_events():
+    global allEvents
+    global subOrgEvents
 
     newEvents = [];
     newSubOrgEvents = {'AASU': [], 'CASA': [], 'HEAL': [], 'KUSA': [], 'FSA': [], 'FLP': [], 'VSO': []};
@@ -57,6 +59,7 @@ async def get_events():
         for org in newSubOrgEvents:
             if org in name:
                 newSubOrgEvents[org].append(newEvent)
+
     allEvents = newEvents
     subOrgEvents = newSubOrgEvents
 
@@ -119,16 +122,18 @@ async def get_daily_discord():
 @tasks.loop(hours=24.0)
 async def send_daily_discord():
     msg = await get_daily_discord()
-    with open('discord_users.json', 'r+') as file:
-        data = json.load(file)
-        for username in data['usernames']:
-            user = discord.utils.get(bot.users, name=username)
-            if user:
-                await user.send(msg)
-            else:
-                print("User not found: " + username)
+    try:
+        with open('discord_users.json', 'r+') as file:
+            data = json.load(file)
+            for username in data['usernames']:
+                user = discord.utils.get(bot.users, name=username)
+                if user:
+                    await user.send(msg)
+                else:
+                    print("User not found: " + username)
+    except:
+        print("No subscriptions :(")
 
-    pass
 
 @bot.event
 async def on_ready():
@@ -163,19 +168,19 @@ async def events(ctx, *args):
     numTimeFrames = 0;
     for timeframe in timeframes: 
         if timeframe in args:
-            if numTimeFrames > 0:
-                ctx.send("Please only enter one timeframe!")
-                break
             numTimeFrames+=1
+            if numTimeFrames > 1:
+                await ctx.send("Please only enter one timeframe!")
+                break
             eventList = [event for event in eventList if (datetime.strptime(event['start'], '%Y-%m-%d').date()<=timeframes[timeframe])]
             human_str = timeframe
             human_str = human_str.replace("WEEK", "THIS WEEK")
             if len(eventList) == 0:
-                ctx.send(f"No events {human_str.lower()}!")
+                await ctx.send(f"No events {human_str.lower()}!")
             else:
                 heading = heading + " " + human_str
         
-    if len(eventList) > 0 and numTimeFrames==1:
+    if len(eventList) > 0 and numTimeFrames<=1:
         msg = f"__**{heading}**__\n"
           
         for event in eventList:
@@ -183,7 +188,7 @@ async def events(ctx, *args):
             if event['end']!=event['start']:
                 msg = msg + " **-** " + event['end']
             msg = msg + f"* **{event['name']}**"
-            await ctx.send(msg)
+        await ctx.send(msg)
 
 @bot.command()
 async def calendar(ctx):
@@ -206,30 +211,40 @@ async def help(ctx):
 @bot.command()
 async def subscribe(ctx):
     user = ctx.author
-    with open('discord_users.json', 'r+') as file:
-        data = json.load(file)
-        if user.name not in data['usernames']:
-            data['usernames'].append(user.name)
-            await ctx.send("You are now subscribed!")
-        else:
-            await ctx.send("You are already unsubscribed!")
-        file.seek(0)
+    
+    try:
+        with open("discord_users.json", "r+") as file:
+            data = json.load(file)
+            if user.name not in data['usernames']:
+                data['usernames'].append(user.name)
+                await ctx.send("You are now subscribed!")
+            else:
+                await ctx.send("You are already subscribed!")
+    except:
+        data = {'usernames': [user.name]};
+
+    with open("discord_users.json", "w") as file:       
         json.dump(data, file, indent=4)
-        file.truncate()
 
 @bot.command()
 async def unsubscribe(ctx):
     user = ctx.author
-    with open('discord_users.json', 'r+') as file:
-        data = json.load(file)
-        if user.name in data['usernames']:
-            data['usernames'].remove(user.name)
-            await ctx.send("You are no longer subscribed!")
-        else:
-            await ctx.send("You are already unsubscribed!")
-        file.seek(0)
-        json.dump(data, file, indent=4)
-        file.truncate()
+    
+    try:
+        with open("discord_users.json", "r+") as file:
+            data = json.load(file)
+            if user.name in data['usernames']:
+                data['usernames'].remove(user.name)
+                await ctx.send("You are now unsubscribed!")
+                with open("discord_users.json", "w") as file:       
+                    json.dump(data, file, indent=4)
+            else:
+                await ctx.send("You are already unsubscribed!")
+                
+    except:
+        await ctx.send("You are already unsubscribed!")
+
+
 
 
 bot.run("MTE1MjQ0NzU0ODg3NTg3ODUzMA.G0wcx7.l_GVcVLT7x2FOAyML-9Ulkdps32Uj0W6PHEZos")

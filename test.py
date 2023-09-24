@@ -15,9 +15,13 @@ from twilio.rest import Client
 
 if __name__ == "__main__":
 
+    username = "frdddidn"
+    try:
+        with open("discordepic.json", "r+") as file:
+            data = json.load(file)
+            data['usernames'].append(username)  
+    except:
+        data = {'usernames': [username]};
 
-    x = [1,2,3,4,5]
-    for number in x:
-        if number == 3:
-            x.remove(number)
-        print(number)
+    with open("discordepic.json", "w") as file:       
+        json.dump(data, file, indent=4)
