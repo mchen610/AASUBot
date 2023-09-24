@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+
+
 import discord
 from discord.ext import commands, tasks
 
@@ -12,7 +15,7 @@ import json
 
 from twilio.rest import Client
 
-API_KEY = os.environ['GOOGLE_CALENDAR_API_KEY']
+load_dotenv()
 
 allEvents: list[dict[str, str]] = [];
 subOrgEvents: dict = {'AASU': [], 'CASA': [], 'HEAL': [], 'KUSA': [], 'FSA': [], 'FLP': [], 'VSO': []};
@@ -31,8 +34,9 @@ async def get_events():
 
     newEvents = [];
     newSubOrgEvents = {'AASU': [], 'CASA': [], 'HEAL': [], 'KUSA': [], 'FSA': [], 'FLP': [], 'VSO': []};
-
-    service = build('calendar', 'v3', developerKey=API_KEY)
+    
+    GOOGLE_CALENDAR_API_KEY = os.environ['GOOGLE_CALENDAR_API_KEY']
+    service = build('calendar', 'v3', developerKey=GOOGLE_CALENDAR_API_KEY)
 
     today = datetime.utcnow()
     print(today)

@@ -13,15 +13,8 @@ import os
 import json
 from twilio.rest import Client
 
+from dotenv import load_dotenv
+
 if __name__ == "__main__":
-
-    username = "frdddidn"
-    try:
-        with open("discordepic.json", "r+") as file:
-            data = json.load(file)
-            data['usernames'].append(username)  
-    except:
-        data = {'usernames': [username]};
-
-    with open("discordepic.json", "w") as file:       
-        json.dump(data, file, indent=4)
+    load_dotenv()
+    print(os.environ['HI'])
