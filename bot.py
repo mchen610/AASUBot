@@ -13,10 +13,9 @@ import json
 from twilio.rest import Client
 
 API_KEY = os.environ['GOOGLE_CALENDAR_API_KEY']
-print(os.environ)
 
 allEvents: list[dict[str, str]] = [];
-suborgEvents: dict = {'AASU': [], 'CASA': [], 'HEAL': [], 'KUSA': [], 'FSA': [], 'FLP': [], 'VSO': []};
+subOrgEvents: dict = {'AASU': [], 'CASA': [], 'HEAL': [], 'KUSA': [], 'FSA': [], 'FLP': [], 'VSO': []};
 
 intents = discord.Intents.default()
 intents.members = True
@@ -27,6 +26,9 @@ bot.remove_command('help')
 
 @tasks.loop(hours=24.0)
 async def get_events():
+
+    newEvents = [];
+    newSubOrgEvents = {'AASU': [], 'CASA': [], 'HEAL': [], 'KUSA': [], 'FSA': [], 'FLP': [], 'VSO': []};
 
     service = build('calendar', 'v3', developerKey=API_KEY)
 
@@ -51,10 +53,12 @@ async def get_events():
         end = (date_parse(event['end'].get('date'))-timedelta(days=1)).strftime('%Y-%m-%d')
         newEvent = {'name': name, 'start': start, 'end': end}
 
-        allEvents.append(newEvent)
-        for org in suborgEvents:
+        newEvents.append(newEvent)
+        for org in newSubOrgEvents:
             if org in name:
-                suborgEvents[org].append(newEvent)
+                newSubOrgEvents[org].append(newEvent)
+    allEvents = newEvents
+    subOrgEvents = newSubOrgEvents
 
 async def get_daily_sms():
     msg = "No events today!";
@@ -100,16 +104,16 @@ async def send_daily_sms():
         file.truncate()
 
 async def get_daily_discord():
-    msg = "__No events today!__";
+    msg = "No events today!";
     tomorrow = date.today()+timedelta(days=1)
     eventList = [event for event in allEvents if (datetime.strptime(event['start'], '%Y-%m-%d').date()<=tomorrow)]
     if len(eventList) > 0:
         msg = "__**IMMEDIATE EVENTS**__\n"
         for event in eventList:
-                    msg = msg+'\n*'+event['start']
-                    if event['end']!=event['start']:
-                        msg = msg + " **-** " + event['end']
-                    msg = msg + f"* **{event['name']}**"
+            msg = msg+'\n*'+event['start']
+            if event['end']!=event['start']:
+                msg = msg + " **-** " + event['end']
+            msg = msg + f"* **{event['name']}**"
     return msg
 
 @tasks.loop(hours=24.0)
@@ -121,9 +125,8 @@ async def send_daily_discord():
             user = discord.utils.get(bot.users, name=username)
             if user:
                 await user.send(msg)
-                print('hi')
             else:
-                print('wtf')
+                print("User not found: " + username)
 
     pass
 
@@ -173,7 +176,8 @@ async def events(ctx, *args):
                 heading = heading + " " + human_str
         
     if len(eventList) > 0 and numTimeFrames==1:
-        msg = f"__**{heading}**__\n"  
+        msg = f"__**{heading}**__\n"
+          
         for event in eventList:
             msg = msg+'\n*'+event['start']
             if event['end']!=event['start']:
@@ -192,6 +196,8 @@ async def help(ctx):
 **COMMANDS**
 !events [suborg] [timeframe]
 !calendar
+!subscibe
+!unsubscribe
 
 **Suborgs**: AASU, CASA, HEAL, KUSA, FSA, FLP, VSO
 **Timeframes**: today, tomorrow, week
@@ -200,14 +206,30 @@ async def help(ctx):
 @bot.command()
 async def subscribe(ctx):
     user = ctx.author
-    print(user.name, user.id)
     with open('discord_users.json', 'r+') as file:
         data = json.load(file)
-        data['usernames'].append(user.name)
+        if user.name not in data['usernames']:
+            data['usernames'].append(user.name)
+            await ctx.send("You are now subscribed!")
+        else:
+            await ctx.send("You are already unsubscribed!")
         file.seek(0)
         json.dump(data, file, indent=4)
         file.truncate()
 
+@bot.command()
+async def unsubscribe(ctx):
+    user = ctx.author
+    with open('discord_users.json', 'r+') as file:
+        data = json.load(file)
+        if user.name in data['usernames']:
+            data['usernames'].remove(user.name)
+            await ctx.send("You are no longer subscribed!")
+        else:
+            await ctx.send("You are already unsubscribed!")
+        file.seek(0)
+        json.dump(data, file, indent=4)
+        file.truncate()
 
 
 bot.run("MTE1MjQ0NzU0ODg3NTg3ODUzMA.G0wcx7.l_GVcVLT7x2FOAyML-9Ulkdps32Uj0W6PHEZos")
