@@ -14,11 +14,22 @@ import os
 import json
 
 from twilio.rest import Client
+import phonenumbers
 
 load_dotenv()
 
 allEvents: list[dict[str, str]] = [];
 subOrgEvents: dict = {'AASU': [], 'CASA': [], 'HEAL': [], 'KUSA': [], 'FSA': [], 'FLP': [], 'VSO': []};
+
+
+account_sid = os.environ['TWILIO_ACCOUNT_SID']
+auth_token = os.environ['TWILIO_AUTH_TOKEN']
+verify_sid = os.environ['TWILIO_VERIFY_SID']
+
+client = Client(account_sid, auth_token)
+verify_service = client.verify.v2.services(verify_sid)
+verifying_user: discord.User = None
+verifying_number = ''
 
 intents = discord.Intents.default()
 intents.members = True
@@ -84,31 +95,31 @@ async def get_daily_sms():
 @tasks.loop(hours=24.0)
 async def send_daily_sms():
 
-    account_sid = os.environ['TWILIO_ACCOUNT_SID']
-    auth_token = os.environ['TWILIO_AUTH_TOKEN']
-
-    client = Client(account_sid, auth_token)
-    
     msg = await get_daily_sms()
-    with open('numbers.json', 'r+') as file:
-        data = json.load(file)
-        valid_numbers = []
-        for number in data['numbers']:
-            try:
-                client.messages \
-                    .create(
-                        body=msg,
-                        from_ =  "+18336331775",
-                        to = number
-                    )
-                valid_numbers.append(number)
-            except:
-                if number not in data['invalid_numbers']:
-                    data['invalid_numbers'].append(number)
-        data['numbers'] = valid_numbers
-        file.seek(0)
-        json.dump(data, file, indent=4)
-        file.truncate()
+    try:
+        with open('numbers.json', 'r+') as file:
+            data = json.load(file)
+            valid_numbers = []
+            for number in data['numbers']:
+                try:
+                    client.messages \
+                        .create(
+                            body=msg,
+                            from_ =  "8336331775",
+                            to = number
+                        )
+                    valid_numbers.append(number)
+                except:
+                    if number not in data['invalid_numbers']:
+                        data['invalid_numbers'].append(number)
+            data['numbers'] = valid_numbers
+            file.seek(0)
+            json.dump(data, file, indent=4)
+            file.truncate()
+    except:
+        with open('numbers.json', 'w+') as file:
+            numbers = {'numbers': [], 'invalid_numbers': []}
+            json.dump(numbers, file, indent=4)
 
 async def get_daily_discord():
     msg = "No events today!";
@@ -213,25 +224,59 @@ async def help(ctx):
 ''')
     
 @bot.command()
-async def subscribe(ctx):
-    user = ctx.author
-    
-    try:
-        with open("discord_users.json", "r+") as file:
-            data = json.load(file)
-            if user.name not in data['usernames']:
-                data['usernames'].append(user.name)
-                await ctx.send("You are now subscribed!")
-            else:
-                await ctx.send("You are already subscribed!")
-    except:
-        data = {'usernames': [user.name]};
+async def verify(ctx, *args):
+    if verifying_number != '' and ctx.author==verifying_user:
+        for arg in args:
+            if str(arg).isnumeric() and len(str(arg)) == 6:
+                result = verify_service.verification_checks.create(to=verifying_number, code=arg)
+                if result.status == 'approved':
+                    print('poggers')
+                    verifying_number = ''
+                    verifying_user = None
 
-    with open("discord_users.json", "w") as file:       
-        json.dump(data, file, indent=4)
+
 
 @bot.command()
-async def unsubscribe(ctx):
+async def subscribe(ctx, *args):
+    global verifying_number
+    global verifying_user
+
+    user = ctx.author
+    
+    is_sms_subscribe = False
+    for arg in args:
+        try:    
+            parsed_phone_number = phonenumbers.parse(arg)
+            is_possible_phone_number = phonenumbers.is_possible_number(parsed_phone_number)
+        except:
+            is_possible_phone_number = False
+
+        if is_possible_phone_number:
+            if client.lookups.v2.phone_numbers(arg).fetch().valid:
+                verify_service.verifications.create(
+                    to=arg, channel='sms'
+                )
+                verifying_number = arg
+                verifying_user = user
+                is_sms_subscribe = True 
+
+    if not is_sms_subscribe:
+        try:
+            with open("discord_users.json", "r+") as file:
+                data = json.load(file)
+                if user.name not in data['usernames']:
+                    data['usernames'].append(user.name)
+                    await ctx.send("You are now subscribed!")
+                else:
+                    await ctx.send("You are already subscribed!")
+        except:
+            data = {'usernames': [user.name]};
+
+        with open("discord_users.json", "w") as file:       
+            json.dump(data, file, indent=4)
+
+@bot.command()
+async def unsubscribe(ctx, *args):
     user = ctx.author
     
     try:
@@ -251,4 +296,4 @@ async def unsubscribe(ctx):
 
 
 
-bot.run("MTE1MjQ0NzU0ODg3NTg3ODUzMA.G0wcx7.l_GVcVLT7x2FOAyML-9Ulkdps32Uj0W6PHEZos")
+bot.run(os.environ['DISCORD_AASU_BOT_TOKEN'])
