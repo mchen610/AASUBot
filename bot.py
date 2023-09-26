@@ -1,6 +1,5 @@
 from dotenv import load_dotenv
 
-
 import discord
 from discord.ext import commands, tasks
 
@@ -97,29 +96,17 @@ async def send_daily_sms():
 
     msg = await get_daily_sms()
     try:
-        with open('numbers.json', 'r+') as file:
+        with open('numbers.json', 'r') as file:
             data = json.load(file)
-            valid_numbers = []
-            for number in data['numbers']:
-                try:
-                    client.messages \
-                        .create(
-                            body=msg,
-                            from_ =  "8336331775",
-                            to = number
-                        )
-                    valid_numbers.append(number)
-                except:
-                    if number not in data['invalid_numbers']:
-                        data['invalid_numbers'].append(number)
-            data['numbers'] = valid_numbers
-            file.seek(0)
-            json.dump(data, file, indent=4)
-            file.truncate()
+            for number in data:
+                client.messages \
+                    .create(
+                        body=msg,
+                        from_ =  "8336331775",
+                        to = number
+                    )
     except:
-        with open('numbers.json', 'w+') as file:
-            numbers = {'numbers': [], 'invalid_numbers': []}
-            json.dump(numbers, file, indent=4)
+        print("No SMS subscriptions :(")
 
 async def get_daily_discord():
     msg = "No events today!";
@@ -225,12 +212,29 @@ async def help(ctx):
     
 @bot.command()
 async def verify(ctx, *args):
+    global verifying_number
+    global verifying_user
+    user = ctx.author
+
     if verifying_number != '' and ctx.author==verifying_user:
         for arg in args:
             if str(arg).isnumeric() and len(str(arg)) == 6:
                 result = verify_service.verification_checks.create(to=verifying_number, code=arg)
                 if result.status == 'approved':
-                    print('poggers')
+                    try:
+                        with open("numbers.json", "r+") as file:
+                            data = json.load(file)
+                            if arg not in data:
+                                data[verifying_number] = user.name
+                                
+                    except:
+                        data = {arg: user.name}
+                        await ctx.send("You are now subscribed via SMS!")
+                    
+                    with open("numbers.json", "w") as file:
+                        json.dump(data, file, indent=4)
+                    
+                    
                     verifying_number = ''
                     verifying_user = None
 
@@ -243,7 +247,6 @@ async def subscribe(ctx, *args):
 
     user = ctx.author
     
-    is_sms_subscribe = False
     for arg in args:
         try:    
             parsed_phone_number = phonenumbers.parse(arg)
@@ -253,45 +256,69 @@ async def subscribe(ctx, *args):
 
         if is_possible_phone_number:
             if client.lookups.v2.phone_numbers(arg).fetch().valid:
+                try:
+                    with open("numbers.json", "r+") as file:
+                        data = json.load(file)
+                        if arg in data:
+                            await ctx.send("You are already subscribed via SMS")
+                            break
+                except:
+                    pass
+
+                await ctx.send("Please enter the verification code sent to your phone number. ex. **!verify 123456**")
                 verify_service.verifications.create(
                     to=arg, channel='sms'
                 )
                 verifying_number = arg
                 verifying_user = user
-                is_sms_subscribe = True 
+                return
+    
+    try:
+        with open("discord_users.json", "r+") as file:
+            data = json.load(file)
+            if user.name not in data['usernames']:
+                data['usernames'].append(user.name)
+            else:
+                await ctx.send("You are already subscribed!")
+    except:
+        data = {'usernames': [user.name]}
 
-    if not is_sms_subscribe:
-        try:
-            with open("discord_users.json", "r+") as file:
-                data = json.load(file)
-                if user.name not in data['usernames']:
-                    data['usernames'].append(user.name)
-                    await ctx.send("You are now subscribed!")
-                else:
-                    await ctx.send("You are already subscribed!")
-        except:
-            data = {'usernames': [user.name]};
-
-        with open("discord_users.json", "w") as file:       
-            json.dump(data, file, indent=4)
+    await ctx.send("You are now subscribed!")
+    with open("discord_users.json", "w") as file:       
+        json.dump(data, file, indent=4)
 
 @bot.command()
 async def unsubscribe(ctx, *args):
     user = ctx.author
     
+    for arg in args:
+        if arg == "sms":
+            try:
+                with open("numbers.json", "r+") as file:
+                    data = json.load(file)
+                    for number in data:
+                        if data[number] == user.name:
+                            del data[number]
+                            is_sms_unsubscribe = True
+                            await ctx.send("You are now unsubscribed from SMS reminders.")
+                            break
+            except:
+                continue
+            await ctx.send("Error: you are already unsubscribed from SMS reminders.")
+            return
+
     try:
         with open("discord_users.json", "r+") as file:
             data = json.load(file)
             if user.name in data['usernames']:
                 data['usernames'].remove(user.name)
-                await ctx.send("You are now unsubscribed!")
-                with open("discord_users.json", "w") as file:       
-                    json.dump(data, file, indent=4)
-            else:
-                await ctx.send("You are already unsubscribed!")
+                await ctx.send("You are now unsubscribed.")
+        with open("discord_users.json", "w") as file:
+            json.dump(data, file, indent=4)
+            return  
                 
     except:
-        await ctx.send("You are already unsubscribed!")
+        await ctx.send("Error: you are already unsubscribed!")
 
 
 
