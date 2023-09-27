@@ -5,7 +5,6 @@ from discord.ext import commands, tasks
 
 from datetime import date, datetime, timedelta
 from dateutil.parser import parse as date_parse
-from pytz import timezone
 
 from googleapiclient.discovery import build
 
@@ -297,8 +296,9 @@ async def subscribe(ctx, arg=''):
             if len(arg) == 10:
                 await ctx.send("Error: invalid format. Remember to add the country code *(+1 for US)*.")
             else:
-                await ctx.send("Error: invalid input.")
-
+                await ctx.send("Error: invalid number.")
+        else:
+            await ctx.send("Error: invalid input.")
 
 
 
