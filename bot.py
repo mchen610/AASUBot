@@ -19,13 +19,15 @@ load_dotenv()
 allEvents: list[dict[str, str]] = [];
 subOrgEvents: dict = {'AASU': [], 'CASA': [], 'HEAL': [], 'KUSA': [], 'FSA': [], 'FLP': [], 'VSO': []};
 
+GOOGLE_CALENDAR_API_KEY = os.environ['GOOGLE_CALENDAR_API_KEY']
+TWILIO_ACCOUNT_SID = os.environ['TWILIO_ACCOUNT_SID']
+TWILIO_AUTH_TOKEN = os.environ['TWILIO_AUTH_TOKEN']
+TWILIO_VERIFY_SID = os.environ['TWILIO_VERIFY_SID']
+DISCORD_AASU_BOT_TOKEN="MTE1MjQ0NzU0ODg3NTg3ODUzMA.GPfaPj.Zxe5da6XhgKkLxpiUtVcG8anh2RBow61xri_XE"
 
-account_sid = os.environ['TWILIO_ACCOUNT_SID']
-auth_token = os.environ['TWILIO_AUTH_TOKEN']
-verify_sid = os.environ['TWILIO_VERIFY_SID']
 
-client = Client(account_sid, auth_token)
-verify_service = client.verify.v2.services(verify_sid)
+client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+verify_service = client.verify.v2.services(TWILIO_VERIFY_SID)
 verifying_user: discord.User = None
 verifying_number = ''
 
@@ -44,7 +46,6 @@ async def get_events():
     newEvents = [];
     newSubOrgEvents = {'AASU': [], 'CASA': [], 'HEAL': [], 'KUSA': [], 'FSA': [], 'FLP': [], 'VSO': []};
     
-    GOOGLE_CALENDAR_API_KEY = os.environ['GOOGLE_CALENDAR_API_KEY']
     service = build('calendar', 'v3', developerKey=GOOGLE_CALENDAR_API_KEY)
 
     today = datetime.utcnow()
@@ -343,10 +344,5 @@ async def unsubscribe(ctx, arg=''):
                 await ctx.send("Error: you are already unsubscribed from SMS reminders.")
         else:
             await ctx.send("Error: please enter either **!unsubscribe** to unsubscribe from Discord reminders or **!unsubscribe sms** to unsubscribe from SMS reminders.")
-        
-        
 
-
-
-
-bot.run(os.environ['DISCORD_AASU_BOT_TOKEN'])
+bot.run(DISCORD_AASU_BOT_TOKEN)
