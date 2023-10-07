@@ -1,7 +1,8 @@
 from dotenv import load_dotenv
 
 import discord
-from discord.ext import commands, tasks
+from discord.commands import Option 
+from discord.ext import tasks
 
 from datetime import date, datetime, timedelta
 from dateutil.parser import parse as date_parse
@@ -9,32 +10,38 @@ from dateutil.parser import parse as date_parse
 from googleapiclient.discovery import build
 
 import os
-import json
 
 from twilio.rest import Client
 import phonenumbers
 
-load_dotenv()
+import firebase_admin
+from firebase_admin import credentials, db
 
-allEvents: list[dict[str, str]] = [];
-subOrgEvents: dict = {'AASU': [], 'CASA': [], 'HEAL': [], 'KUSA': [], 'FSA': [], 'FLP': [], 'VSO': []};
+load_dotenv()
 
 GOOGLE_CALENDAR_API_KEY = os.environ['GOOGLE_CALENDAR_API_KEY']
 TWILIO_ACCOUNT_SID = os.environ['TWILIO_ACCOUNT_SID']
 TWILIO_AUTH_TOKEN = os.environ['TWILIO_AUTH_TOKEN']
 TWILIO_VERIFY_SID = os.environ['TWILIO_VERIFY_SID']
+TWILIO_PHONE_NUMBER = os.environ['TWILIO_PHONE_NUMBER']
 DISCORD_AASU_BOT_TOKEN=os.environ['DISCORD_AASU_BOT_TOKEN']
 
 
-client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-verify_service = client.verify.v2.services(TWILIO_VERIFY_SID)
+twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+verify_service = twilio_client.verify.v2.services(TWILIO_VERIFY_SID)
 
 intents = discord.Intents.default()
 intents.members = True
-intents.message_content = True 
+intents.message_content = True  
 
-bot = commands.Bot(command_prefix='!', intents=intents, activity=discord.Activity(type=3, name="!help"), status=discord.Status.online)
-bot.remove_command('help')
+bot = discord.Bot(intents=intents, activity=discord.Activity(type=3, name="/help"), status=discord.Status.online)
+
+#path to Firebase credentials
+cred = credentials.Certificate("service_account_key.json") 
+firebase_admin.initialize_app(cred, {'databaseURL': "https://aasu-discord-bot-default-rtdb.firebaseio.com/"})
+
+allEvents: list[dict[str, str]] = []
+subOrgEvents: dict = {'AASU': [], 'CASA': [], 'HEAL': [], 'KUSA': [], 'FSA': [], 'FLP': [], 'VSO': []}
 
 @tasks.loop(hours=24.0)
 async def get_events():
@@ -71,6 +78,8 @@ async def get_events():
         for org in newSubOrgEvents:
             if org in name:
                 newSubOrgEvents[org].append(newEvent)
+        if "FAHM" in name and "FSA" not in name:
+            newSubOrgEvents['FSA'].append(newEvent)
 
     allEvents = newEvents
     subOrgEvents = newSubOrgEvents
@@ -93,18 +102,15 @@ async def get_daily_sms():
 async def send_daily_sms():
 
     msg = await get_daily_sms()
-    try:
-        with open("users_sms.json", 'r') as file:
-            data = json.load(file)['users']
-            for user in data:
-                client.messages \
-                    .create(
-                        body=msg,
-                        from_ =  "8336331775",
-                        to = data[user]
-                    )
-    except:
-        print("No SMS subscriptions :(")
+    data = db.reference('users_sms/users').get() or {}
+    for id in data:
+        twilio_client.messages \
+            .create(
+                body=msg,
+                from_ =  TWILIO_PHONE_NUMBER,
+                to = data[str(id)]
+            )
+
 
 async def get_daily_discord():
     msg = "No events today!";
@@ -122,18 +128,18 @@ async def get_daily_discord():
 @tasks.loop(hours=24.0)
 async def send_daily_discord():
     msg = await get_daily_discord()
-    try:
-        with open("users_discord.json", 'r+') as file:
-            data = json.load(file)
-            for username in data['usernames']:
-                user = discord.utils.get(bot.users, name=username)
-                if user:
-                    await user.send(msg)
-                else:
-                    print("User not found: " + username)
-    except:
-        print("No subscriptions :(")
-
+    ref = db.reference('users_discord')
+    data = ref.get() or {'id': [], 'invalid_id': []}
+    for id in data['id']:
+        user = bot.get_user(id)
+        try:
+            await user.send(msg)
+        except:
+            try:
+                data['invalid_id'].append(id)
+            except:
+                data['invalid_id'] = [id]
+            ref.set(data)
 
 @bot.event
 async def on_ready():
@@ -143,204 +149,166 @@ async def on_ready():
     send_daily_discord.start()
 
 
-@bot.command()
-async def events(ctx, *args):
-    eventList: list = [];
-    heading = "EVENTS"
-
-    args = list(args)
-    for i in range(len(args)):
-        args[i] = args[i].upper()
-    print(args)
-
-    for org in set(args) & set(subOrgEvents):
-        eventList = eventList + subOrgEvents[org]
-        heading = org+" "+heading
-
-    eventList.sort(key=lambda x: x['start'])
-
-    if len(eventList) == 0:
-        eventList = allEvents
-        heading = "ALL AASU EVENTS"
-
-
-    timeframes = {"TODAY": date.today(), "TOMORROW": date.today()+timedelta(1), "WEEK": date.today()+timedelta(7)}
-    numTimeFrames = 0;
-    for timeframe in timeframes: 
-        if timeframe in args:
-            numTimeFrames+=1
-            if numTimeFrames > 1:
-                await ctx.send("Please only enter one timeframe!")
-                break
+@bot.command(description="Get events within the next month or optionally specify a sub-organization or timeframe.")
+async def events(ctx, timeframe: Option(str, "Get events within a certain timeframe (today, tomorrow, this week)", default=''), suborg: Option(str, "AASU sub-organization", default='')):
+    suborg = suborg.upper()
+    timeframe = timeframe.upper()
+    if suborg in subOrgEvents or suborg == '':
+        if suborg in subOrgEvents:
+            eventList = subOrgEvents[suborg]
+            heading = f"{suborg} EVENTS"
+        elif suborg == '':
+            eventList = allEvents
+            heading = "ALL AASU EVENTS"
+    
+        timeframes = {"TODAY": date.today(), "TOMORROW": date.today()+timedelta(1), "WEEK": date.today()+timedelta(7), "THIS WEEK": date.today()+timedelta(7), '': date.today()+timedelta(30)}
+        if timeframe in timeframes:
             eventList = [event for event in eventList if (datetime.strptime(event['start'], '%Y-%m-%d').date()<=timeframes[timeframe])]
-            human_str = timeframe
-            human_str = human_str.replace("WEEK", "THIS WEEK")
+            if timeframe == "WEEK":
+                timeframe = "THIS WEEK"
             if len(eventList) == 0:
-                await ctx.send(f"No events {human_str.lower()}!")
+                if suborg == '':
+                    await ctx.respond(f"Absolutely no events {timeframe.lower()}!")
+                else:
+                    await ctx.respond(f"No {suborg} events {timeframe.lower()}!")
             else:
-                heading = heading + " " + human_str
-        
-    if len(eventList) > 0 and numTimeFrames<=1:
-        msg = f"__**{heading}**__\n"
-          
-        for event in eventList:
-            msg = msg+'\n*'+event['start']
-            if event['end']!=event['start']:
-                msg = msg + " **-** " + event['end']
-            msg = msg + f"* **{event['name']}**"
-        await ctx.send(msg)
+                heading = heading + " " + timeframe
+            
+                msg = f"__**{heading}**__\n"
 
-@bot.command()
+                for event in eventList:
+                    msg = msg+'\n*'+event['start']
+                    if event['end']!=event['start']:
+                        msg = msg + " **-** " + event['end']
+                    msg = msg + f"* **{event['name']}**"
+                await ctx.respond(msg)
+        else:
+            await ctx.respond("Error: Invalid timeframe.")
+    else:
+        await ctx.respond("Error: Invalid suborg.")
+
+@bot.command(description="Get the link to AASU's calendar.")
 async def calendar(ctx):
-    await ctx.send("[**UF AASU Calendar**](http://www.ufaasu.com/calendar/)")
+    await ctx.respond("[**UF AASU Calendar**](http://www.ufaasu.com/calendar/)")
 
-@bot.command()
+@bot.command(description="Get a description of all the commands.")
 async def help(ctx):
-    await ctx.send(
+    await ctx.respond(
 '''
 **COMMANDS:**
 
-- `!events [suborg] [timeframe]`: Get events within the next month or optionally specify a sub-organization or timeframe.
+- `/events [suborg] [timeframe]`: Get events within the next month or optionally specify a sub-organization or timeframe.
   - *Suborgs: AASU, CASA, HEAL, KUSA, FSA, FLP, VSO*
   - *Timeframes: today, tomorrow, week*
 
-- `!calendar`: Get the link to AASU's calendar.
+- `/calendar`: Get the link to AASU's calendar.
 
-- `!subscribe [YOUR PHONE NUMBER]`: Subscribe to Discord or SMS reminders.
-  - *Phone Number Format:* `+13525550000` *(MUST INCLUDE COUNTRY CODE, +1 FOR USA)*
+- `/subscribe`: Subscribe to Discord or SMS reminders.
 
-- `!unsubscribe ['sms']`: Unsubscribe from Discord or SMS reminders.
+- `/unsubscribe`: Unsubscribe from Discord or SMS reminders.
 ''')
-    
-@bot.command()
-async def verify(ctx, arg=''):
+
+
+@bot.command(description="Verify your phone number with the 6-digit code.")
+async def verify(ctx, code: Option(str, "6-digit code")):
     user = ctx.author
+
+    ref = db.reference('users_sms')
+    data = ref.get() or {'verified_users': {}, 'pending_users': {}}
+
+    if str(user.id) in data['pending_users']:
+        if code.isnumeric() and len(code) == 6:
+            verifying_number = data['pending_users'][str(user.id)]
+            result = verify_service.verification_checks.create(to=verifying_number, code=code)
+            if result.status == 'approved':
+                try:
+                    data['verified_users'][user.id] = verifying_number
+                except:
+                    data['verified_users'] = {user.id: verifying_number}
+                del data['pending_users'][str(user.id)]
+                ref.set(data)
+
+                await ctx.respond("You are now subscribed via SMS!")
+                
+            else:
+                await ctx.respond("Error: Invalid key. Please try again.")
+        else:
+            await ctx.respond("Error: Invalid key. Please make sure you enter the 6-digit key sent to your phone!")
+            
+    elif 'verified_users' in data and str(user.id) in data['verified_users']:
+        await ctx.respond("Error: You are already subscribed via SMS!")
+
+    else:
+        await ctx.respond("Error: Please begin verification using `/subscribe sms`.")
+
+subscribe = bot.create_group("subscribe", "Subscribe to event reminders.")
+
+@subscribe.command(description="Subscribe to event reminders via Discord.")
+async def discord(ctx):
+    user = ctx.author
+    ref = db.reference('users_discord/id')
+    data = ref.get() or []
+    if user.id in data:
+        await ctx.respond("Error: You are already subscribed!")
+    else:
+        data.append(user.id)
+        ref.set(data)
+        await ctx.respond("You are now subscribed!")
+
+@subscribe.command(description="Subscribe to event reminders via SMS.")
+async def sms(ctx, number: Option(str, "Your phone number"), country_code: Option(str, "Your country code (default is '+1' for USA)", default="+1")):
+    user = ctx.author
+    number = country_code + number
+
+    try:    
+        is_valid_number = phonenumbers.is_possible_number(phonenumbers.parse(number)) and twilio_client.lookups.v2.phone_numbers(number).fetch().valid
+    except:
+        is_valid_number = False
+
+    if is_valid_number:
+        ref = db.reference('users_sms')
+        data = ref.get() or {'verified_users': {}, 'pending_users': {}}
+
+        if 'verified_users' in data and str(user.id) in data['verified_users']:
+            await ctx.respond("Error: You are already subscribed via SMS!")
+
+        else:
+            data['pending_users'][user.id] = number
+            ref.set(data)
+            verify_service.verifications.create(to=number, channel='sms')
+            await ctx.respond("Please enter the verification code sent to your phone number using `/verify`.")
+            
+    else:
+        ctx.respond("Error: This phone number does not exist!")
+
+
+unsubscribe = bot.create_group("unsubscribe", "Unsubscribe from event reminders.")
+
+@unsubscribe.command(description="Unsubscribe from Discord event reminders.")
+async def discord(ctx):
+    user = ctx.author
+    ref = db.reference('users_discord/id')
+    data = ref.get() or []
+    try:
+        data.remove(user.id)
+        ref.set(data)        
+        await ctx.respond("You are now unsubscribed.")
+    except:
+        await ctx.respond("Error: You are already unsubscribed.")
+
+
+@unsubscribe.command(description="Unsubscribe from SMS event reminders.")
+async def sms(ctx):
+    user = ctx.author
+    ref = db.reference('users_sms')
+    data = ref.get()
 
     try:
-        with open("users_sms.json", "r") as file:
-            data = json.load(file)
+        del data['verified_users'][str(user.id)]
+        ref.set(data)
+        await ctx.respond("You are now unsubscribed from SMS reminders.")
     except:
-        data = {'users': {}, 'pending_users': {}}
-
-    if user.name in data['pending_users']:
-        if arg.isnumeric() and len(arg) == 6:
-            verifying_number = data['pending_users'][user.name]
-            result = verify_service.verification_checks.create(to=verifying_number, code=arg)
-            if result.status == 'approved':
-                data['users'][user.name] = verifying_number
-                del data['pending_users'][user.name]
-                
-                with open("users_sms.json", "w") as file:
-                    json.dump(data, file, indent=4)
-
-                await ctx.send("You are now subscribed via SMS!")
-                
-            else:
-                await ctx.send("Error: invalid key. Please try again.")
-        else:
-            await ctx.send("Error: invalid key. Please make sure you enter the 6-digit key sent to your phone!")
-            
-    elif user.name in data['users']:
-        await ctx.send("Error: You are already subscribed via SMS!")
-    else:
-        await ctx.send("Error: make sure you have entered !subscribe [YOUR PHONE NUMBER] first!")
-
-@bot.command()
-async def subscribe(ctx, arg=''):
-    user = ctx.author
-
-    #discord subscription
-    if len(arg) == 0:
-        try:
-            with open("users_discord.json", "r+") as file:
-                data = json.load(file)
-                if user.name not in data['usernames']:
-                    data['usernames'].append(user.name)
-                else:
-                    await ctx.send("Error: you are already subscribed!")
-                    return
-        except:
-            data = {'usernames': [user.name]}
-
-        await ctx.send("You are now subscribed!")
-        with open("users_discord.json", "w") as file:       
-            json.dump(data, file, indent=4)
-
-    #sms subscription
-    else:
-        try:    
-            parsed_phone_number = phonenumbers.parse(arg)
-            is_possible_phone_number = phonenumbers.is_possible_number(parsed_phone_number)
-        except:
-            is_possible_phone_number = False
-
-        if is_possible_phone_number:
-            if client.lookups.v2.phone_numbers(arg).fetch().valid:
-                try:
-                    with open("users_sms.json", "r+") as file:
-                        data = json.load(file)                        
-                except:
-                    data = {'users': {}, 'pending_users': {}}
-
-                if user.name in data['users']:
-                    await ctx.send("Error: you are already subscribed via SMS!")
-                else:
-                    data['pending_users'][user.name] = arg
-                    await ctx.send("Please enter the verification code sent to your phone number *(e.g. **!verify 123456**)*.")
-                    verify_service.verifications.create(
-                        to=arg, channel='sms'
-                    )
-                    with open("users_sms.json", "w") as file:
-                        json.dump(data, file, indent=4)
-            else:
-                ctx.send("Error: this phone number does not exist!")
-        elif arg.isnumeric():
-            if len(arg) == 10:
-                await ctx.send("Error: invalid format. Remember to add the country code *(+1 for US)*.")
-            else:
-                await ctx.send("Error: invalid number.")
-        else:
-            await ctx.send("Error: invalid input.")
-
-
-
-@bot.command()
-async def unsubscribe(ctx, arg=''):
-    user = ctx.author
-    if len(arg) == 0:
-        try:
-            with open("users_discord.json", "r") as file:
-                data = json.load(file)
-        except:
-            data = {'usernames': []}
-
-        if user.name in data['usernames']:
-            data['usernames'].remove(user.name)
-            await ctx.send("You are now unsubscribed.")
-        else:
-            await ctx.send("Error: you are already unsubscribed!")
-                
-        with open("users_discord.json", "w") as file:
-            json.dump(data, file, indent=4)               
-
-    else:
-        if arg == "sms":
-            try:
-                with open("users_sms.json", "r") as file:
-                    data = json.load(file)
-            except:
-                data = {'users': {}, 'pending_users': {}}
-
-            if user.name in data['users']:
-                del data['users'][user.name]
-                await ctx.send("You are now unsubscribed from SMS reminders.")
-            else:
-                await ctx.send("Error: you are already unsubscribed from SMS reminders.")
-            
-            with open("users_sms.json", "w") as file:
-                json.dump(data, file, indent=4)
-
-        else:
-            await ctx.send("Error: please enter either **!unsubscribe** to unsubscribe from Discord reminders or **!unsubscribe sms** to unsubscribe from SMS reminders.")
+        await ctx.respond("Error: You are already unsubscribed from SMS reminders.")
+    
 
 bot.run(DISCORD_AASU_BOT_TOKEN)

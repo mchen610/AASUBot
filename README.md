@@ -5,14 +5,14 @@
 ## What does it do?
 This Discord bot allows any member of an AASU-affiliated organization's Discord server to use commands that spit out events tailored to the user's interest, whether in direct messages or inside the server.  
 
-Using `!events`, users can specify a timeframe or a sub-organization to see upcoming events for.
+Using `/events`, users can specify a timeframe or a sub-organization to see upcoming events for.
 
-It also allows users to type `!subscribe` or `!subscribe [YOUR PHONE NUMBER]` to subscribe to daily reminders via SMS or Discord about immediate events that are happening today and tomorrow.  
+`/subscribe` allows users to subscribe to daily reminders via SMS or Discord about immediate events that are happening today and tomorrow.  
 
-Type `!help` to see a full explanation of all of the commands!  
+Type `/help` to see an explanation of all of the commands!  
 
 ## Commands
-- `!help`
-- `!events [timeframe] [suborg]`
-- `!subscribe [YOUR PHONE NUMBER]` 
-- `!unsubscribe [sms]`
+- `/help`
+- `/events [timeframe] [suborg]`
+- `/subscribe [YOUR PHONE NUMBER]` 
+- `/unsubscribe [sms]`
