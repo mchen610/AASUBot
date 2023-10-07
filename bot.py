@@ -102,7 +102,7 @@ async def get_daily_sms():
 async def send_daily_sms():
 
     msg = await get_daily_sms()
-    data = db.reference('users_sms/users').get() or {}
+    data = db.reference('users_sms/verified_users').get() or {}
     for id in data:
         twilio_client.messages \
             .create(
