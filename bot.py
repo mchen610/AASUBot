@@ -4,7 +4,7 @@ import discord
 from discord.commands import Option 
 from discord.ext import tasks
 
-from datetime import date, datetime, timedelta
+from datetime import date, time, datetime, timedelta, timezone
 from dateutil.parser import parse as date_parse
 
 from googleapiclient.discovery import build
@@ -40,11 +40,14 @@ bot = discord.Bot(intents=intents, activity=discord.Activity(type=3, name="/help
 cred = credentials.Certificate("service_account_key.json") 
 firebase_admin.initialize_app(cred, {'databaseURL': "https://aasu-discord-bot-default-rtdb.firebaseio.com/"})
 
-allEvents: list[dict[str, str]] = []
-subOrgEvents: dict = {'AASU': [], 'CASA': [], 'HEAL': [], 'KUSA': [], 'FSA': [], 'FLP': [], 'VSO': []}
+allEvents: list[dict] = []
+subOrgEvents = {'AASU': [], 'CASA': [], 'HEAL': [], 'KUSA': [], 'FSA': [], 'FLP': [], 'VSO': []}
+est = timezone(timedelta(hours=-4))
+midnight = time(0, 0, 0, 0, est)
+before_midnight = time(23, 59, 59, 0, est)
 
-@tasks.loop(hours=24.0)
-async def get_events():
+@tasks.loop(time=before_midnight)
+async def update_events():
     global allEvents
     global subOrgEvents
 
@@ -84,6 +87,9 @@ async def get_events():
     allEvents = newEvents
     subOrgEvents = newSubOrgEvents
 
+    me = bot.get_user(id=186575396366450688)
+    await me.send('Events updated!')
+
 async def get_daily_sms():
     msg = "No events today!";
     tomorrow = date.today()+timedelta(days=1)
@@ -98,7 +104,7 @@ async def get_daily_sms():
     return msg
 
 
-@tasks.loop(hours=24.0)
+@tasks.loop(time=midnight)
 async def send_daily_sms():
 
     msg = await get_daily_sms()
@@ -125,7 +131,7 @@ async def get_daily_discord():
             msg = msg + f"* **{event['name']}**"
     return msg
 
-@tasks.loop(hours=24.0)
+@tasks.loop(time=midnight)
 async def send_daily_discord():
     msg = await get_daily_discord()
     ref = db.reference('users_discord')
@@ -144,7 +150,7 @@ async def send_daily_discord():
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}") 
-    get_events.start()
+    update_events.start()
     send_daily_sms.start()
     send_daily_discord.start()
 
@@ -310,5 +316,4 @@ async def sms(ctx):
     except:
         await ctx.respond("Error: You are already unsubscribed from SMS reminders.")
     
-
 bot.run(DISCORD_AASU_BOT_TOKEN)
