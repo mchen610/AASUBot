@@ -16,6 +16,9 @@ import phonenumbers
 import firebase_admin
 from firebase_admin import credentials, db
 
+from special_messages import send_error_msg, send_pending_msg, send_success_msg
+from suborg import SubOrgGroup
+
 #ENV VARIABLES
 load_dotenv()
 GOOGLE_CALENDAR_API_KEY = os.environ['GOOGLE_CALENDAR_API_KEY']
@@ -62,10 +65,6 @@ async def update_events():
     events_result = service.events().list(calendarId='aasu.uf@gmail.com', timeMin=timeMin, timeMax=timeMax, singleEvents=True, orderBy='startTime').execute()
     events = events_result.get('items', [])
 
-    if not events:
-        print('No upcoming events found.')
-        return
-
     for event in events:
         try:
             name = event['summary']
@@ -104,17 +103,8 @@ def get_events_embed(header: str, suborg: str = 'ALL', timeframe: str = ''):
     if msg == '\n':
         msg = f"{msg}**No events!**"
 
-    embed = discord.Embed(title=header, description=msg, color=subOrgColors[suborg], timestamp=datetime.now())
-    return embed
+    return discord.Embed(title=header, description=msg, color=subOrgColors[suborg], timestamp=datetime.now())
 
-def get_error_embed(msg: str):
-    return discord.Embed(description=f"Error: **{msg}**", color=discord.Color.red(), timestamp=datetime.now())
-
-def get_pending_embed(msg: str):
-    return discord.Embed(description=f"Pending: **{msg}**", color=discord.Color.yellow(), timestamp=datetime.now())
-
-def get_success_embed(msg: str):
-    return discord.Embed(description=f"Success: **{msg}**", color=discord.Color.brand_green(), timestamp=datetime.now())
 
 def get_daily_sms():
     msg = "No events today!"
@@ -130,38 +120,56 @@ def get_daily_sms():
 
 @tasks.loop(time=midnight)
 async def send_daily_sms():
-
     msg = get_daily_sms()
-    data = db.reference('users_sms/verified_users').get() or {}
-    for id in data:
-        twilio_client.messages \
-            .create(
-                body=msg,
-                from_ =  TWILIO_PHONE_NUMBER,
-                to = data[str(id)]
-            )
+    verified_users = db.reference('users_sms/verified_users').get() or {}
+            
+    new_invalid_users = {}
+    for id in verified_users:
+        try:
+            twilio_client.messages \
+                .create(
+                    body=msg,
+                    from_ =  TWILIO_PHONE_NUMBER,
+                    to = verified_users[id]
+                )
+        except:
+            new_invalid_users[id] = verified_users[id]
+    
+    for id in new_invalid_users:
+        del verified_users[id]
+    
+    ref = db.reference('users_sms/invalid_users')
+    old_verified_users = ref.get() or {}
+    old_verified_users.update(new_invalid_users)
+    ref.set(old_verified_users)
+
+async def delete_last_daily(user: discord.User):
+    channel = await bot.create_dm(user)
+    history = await channel.history(limit=1).flatten()
+    if len(history) > 0 and len(history[0].embeds) > 0 and "__**IMMEDIATE EVENTS**__" in str(history[0].embeds[0].title):
+        await history[0].delete()
 
 #TESTED
 @tasks.loop(time=midnight)
 async def send_daily_discord():
     header = "__**IMMEDIATE EVENTS**__"
-    embed = get_events_embed(header, timeframe = "TOMORROW")
-    ref = db.reference('users_discord')
-    data = ref.get() or {'id': [], 'invalid_id': []}
-    for id in data['id']:
-        user = bot.get_user(id)
+    embed = get_events_embed(header, timeframe = "tomorrow")
+    
+    data = db.reference('users_discord/id').get() or []
+    invalid_indices = [] 
+    for index, id in enumerate(data):
         try:
-            channel = await bot.create_dm(user)
-            last_message = await channel.history(limit=1).next()
-            if header in last_message.embeds[0].title:
-                await last_message.delete()
+            user = bot.get_user(id)
+            await delete_last_daily(user)
             await user.send(embed=embed)
         except:
-            try:
-                data['invalid_id'].append(id)
-            except:
-                data['invalid_id'] = [id]
-            ref.set(data)
+            invalid_indices.insert(0, index)
+
+    invalid_data = db.reference('users_discord/invalid_id').get() or []
+    for index in invalid_indices:
+        invalid_data.append(data.pop(index))
+
+    db.reference('users_discord').set({'id': data, 'invalid_id': invalid_data})
 
 @bot.event
 async def on_ready():
@@ -184,49 +192,44 @@ async def events(ctx, timeframe: Option(str, "Get events within a certain timefr
             embed = get_events_embed(header, suborg, timeframe)
             await ctx.respond(embed=embed)
         else:
-            embed = get_error_embed("Invalid timeframe.")
-            await ctx.respond(embed=embed)
+            await send_error_msg(ctx, "Invalid timeframe.")
     else:
-        embed = get_error_embed("Invalid suborg.")
-        await ctx.respond(embed=embed)
+        await send_error_msg(ctx, "Invalid suborg.")
 
 
 @bot.command(description="Verify your phone number with the 6-digit code.")
 async def verify(ctx, code: Option(str, "6-digit code")):
     user = ctx.author
+    user_id = str(user.id)
 
-    ref = db.reference('users_sms')
-    data = ref.get() or {}
+    verified_ref = db.reference('users_sms/verified_users')
+    verified_users = verified_ref.get() or {}
+    pending_ref = db.reference('users_sms/pending_users')
+    pending_users = pending_ref.get() or {}
 
-    if 'pending_users' in data and str(user.id) in data['pending_users']:
+    if user_id in pending_users:
         if code.isnumeric() and len(code) == 6:
-            verifying_number = data['pending_users'][str(user.id)]
+            verifying_number = pending_users[user_id]
             result = verify_service.verification_checks.create(to=verifying_number, code=code)
             if result.status == 'approved':
-                try:
-                    data['verified_users'][user.id] = verifying_number
-                except:
-                    data['verified_users'] = {user.id: verifying_number}
-                del data['pending_users'][str(user.id)]
-                ref.set(data)
+                verified_users[user_id] = verifying_number
+                del pending_users[user_id]
+                verified_ref.set(verified_users)
+                pending_ref.set(pending_users)
 
-                embed = get_success_embed("You are now subscribed via SMS!")
-                await ctx.respond(embed=embed)
+                await send_success_msg(ctx, "You are now subscribed via SMS!")
                 
             else:
-                embed = get_error_embed("Invalid key. Please try again.")
-                await ctx.respond(embed=embed)
+                await send_error_msg(ctx, "Invalid key. Please try again.")
         else:
-            embed = get_error_embed("Invalid key. Please make sure you enter the 6-digit key sent to your phone!")
-            await ctx.respond(embed=embed)
+            await send_error_msg(ctx, "Invalid key. Please make sure you enter the 6-digit key sent to your phone!")
             
-    elif 'verified_users' in data and str(user.id) in data['verified_users']:
-        embed = get_error_embed("You are already subscribed via SMS!")
-        await ctx.respond(embed=embed)
+    elif user_id in verified_users:
+        await send_error_msg(ctx, "You are already subscribed via SMS!")
 
     else:
-        embed = get_error_embed("Please begin verification using `/subscribe sms`.")
-        await ctx.respond(embed=embed)
+        await send_error_msg(ctx, "Please begin verification using `/subscribe sms`.")
+
 
 subscribe = bot.create_group("subscribe", "Subscribe to event reminders.")
 
@@ -236,13 +239,11 @@ async def disc(ctx):
     ref = db.reference('users_discord/id')
     data = ref.get() or []
     if user.id in data:
-        embed = get_error_embed("You are already subscribed!")
-        await ctx.respond(embed=embed)
+        await send_error_msg(ctx, "You are already subscribed!")
     else:
         data.append(user.id)
         ref.set(data)
-        embed = get_success_embed("You are now subscribed!")
-        await ctx.respond(embed=embed)
+        await send_success_msg(ctx, "You are now subscribed!")
 
 @subscribe.command(description="Subscribe to event reminders via SMS.")
 async def sms(ctx, number: Option(str, "Your phone number"), country_code: Option(str, "Your country code (default is '+1' for USA)", default="+1")):
@@ -255,11 +256,10 @@ async def sms(ctx, number: Option(str, "Your phone number"), country_code: Optio
         is_valid_number = False
 
     if is_valid_number:
-        verified_users = db.reference('users_sms/verified_users').get()
+        verified_users = db.reference('users_sms/verified_users').get() or {}
 
-        if verified_users and str(user.id) in verified_users:
-            embed = get_error_embed("You are already subscribed via SMS!")
-            await ctx.respond(embed=embed)
+        if str(user.id) in verified_users:
+            await send_error_msg(ctx, "You are already subscribed via SMS!")
 
         else:
             ref = db.reference('users_sms/pending_users')
@@ -267,12 +267,10 @@ async def sms(ctx, number: Option(str, "Your phone number"), country_code: Optio
             data[user.id] = number
             ref.set(data)
             verify_service.verifications.create(to=number, channel='sms')
-            embed = get_pending_embed("Please enter the verification code sent to your phone number using `/verify`.")
-            await ctx.respond(embed=embed)
+            await send_pending_msg(ctx, "Please enter the verification code sent to your phone number using `/verify`.")
             
     else:
-        embed = get_error_embed("This phone numbre does not exist!")
-        await ctx.respond(embed=embed)
+        await send_error_msg(ctx, "This phone number does not exist!")
 
 
 unsubscribe = bot.create_group("unsubscribe", "Unsubscribe from event reminders.")
@@ -285,26 +283,22 @@ async def disc(ctx):
     try:
         data.remove(user.id)
         ref.set(data)        
-        embed = get_success_embed("You are now unsubscribed.")
-        await ctx.respond(embed=embed)
+        await send_success_msg(ctx, "You are now unsubscribed.")
     except:
-        embed = get_error_embed("You are already unsubscribed.")
-        await ctx.respond(embed=embed)
+        await send_error_msg(ctx, "You are already unsubscribed.")
 
 @unsubscribe.command(description="Unsubscribe from SMS event reminders.")
 async def sms(ctx):
     user = ctx.author
     ref = db.reference('users_sms/verified_users')
-    data = ref.get()
+    data = ref.get() or {}
 
-    try:
+    if str(user.id) in data:
         del data[str(user.id)]
         ref.set(data)
-        embed = get_success_embed("You are now unsubscribed from SMS reminders.")
-        await ctx.respond(embed=embed)
-    except:
-        embed = get_error_embed("You are already unsubscribed from SMS reminders.")
-        await ctx.respond(embed=embed)
+        await send_success_msg(ctx, "You are now unsubscribed from SMS reminders.")
+    else:
+        await send_error_msg(ctx, "You are already unsubscribed from SMS reminders.")
 
 @bot.command(description="Get the link to AASU's calendar.")
 async def calendar(ctx):
@@ -326,5 +320,6 @@ async def help(ctx):
 
 - `/unsubscribe`: Unsubscribe from Discord or SMS reminders.
 ''')
-    
-bot.run(DISCORD_AASU_BOT_TOKEN)
+
+DISCORD_TEST_TOKEN = os.environ['DISCORD_TEST_TOKEN']
+bot.run(DISCORD_TEST_TOKEN)
