@@ -1,6 +1,5 @@
 from typing import Optional
 import asyncio
-import requests
 
 from discord import Color, Embed
 from discord.ext import tasks
@@ -10,7 +9,7 @@ from dateutil.parser import parse as date_parse
 
 from event import Event, EventList
 from config import google_service, get_weather
-from special_messages import *
+from special_messages import get_error_msg
 
 
 est = timezone(timedelta(hours=-4))
@@ -115,7 +114,6 @@ class SubOrgManager:
                     new_event = Event(event_name, date_obj)
 
                     for org in cls.orgs.values():
-                        
                         if org.name == 'AASU' or org.keywords & set(event_name.split()):
                             org.event_list.add(new_event)
 

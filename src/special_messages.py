@@ -2,7 +2,6 @@ from discord import Embed, Color
 from discord.ext.commands import Context
 from datetime import datetime
 
-
 def get_error_msg(msg: str):
     return Embed(description=f"Error: **{msg}**", color=Color.red(), timestamp=datetime.now())
 

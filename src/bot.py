@@ -1,109 +1,28 @@
-
 import discord
 from discord.commands import Option 
 from discord.ext import tasks
 
-from datetime import date, time, datetime, timedelta, timezone
-from dateutil.parser import parse as date_parse
+from datetime import datetime, time, timedelta, timezone
 
-from googleapiclient.discovery import build
-
-from twilio.rest import Client
-import phonenumbers
+from org_manager import SubOrgManager
+from config import TWILIO_PHONE_NUMBER, DISCORD_TOKEN, twilio_client, bot
+from subscriptions import *
 
 from firebase_admin import db
 
-from special_messages import send_error_msg, send_pending_msg, send_success_msg
-from org_manager import SubOrgGroup
-from config import *
-
-#GLOBALS
-subOrgEvents = {'ALL': [], 'AASU': [], 'CASA': [], 'HEAL': [], 'KUSA': [], 'FSA': [], 'FLP': [], 'VSO': []}
-subOrgColors = {'ALL': discord.Color.dark_theme(),  'AASU': discord.Color.dark_theme(), 'CASA': discord.Color.red(), 'HEAL': discord.Color.green(), 'KUSA': discord.Color.blue(), 'FSA': discord.Color.red(), 'FLP': discord.Color.from_rgb(255, 255, 255), 'VSO': discord.Color.orange()}
 est = timezone(timedelta(hours=-4))
-midnight = time(5, 3, 0, 0, est)
-before_midnight = time(5, 2, 0, 0, est)
-
-@tasks.loop(time=before_midnight)
-async def update_events():
-
-    newSubOrgEvents = {'ALL': [], 'AASU': [], 'CASA': [], 'HEAL': [], 'KUSA': [], 'FSA': [], 'FLP': [], 'VSO': []}
-    
-    today = datetime.utcnow()
-    today.replace(hour=0, minute=0, second=0, microsecond=0)
-    inOneMonth = today + timedelta(days=30)
-
-    timeMin = today.isoformat() + 'Z'
-    timeMax = inOneMonth.isoformat() + 'Z'
-
-    service = build('calendar', 'v3', developerKey=GOOGLE_CALENDAR_API_KEY)
-    events_result = service.events().list(calendarId='aasu.uf@gmail.com', timeMin=timeMin, timeMax=timeMax, singleEvents=True, orderBy='startTime').execute()
-    events = events_result.get('items', [])
-
-    for event in events:
-        try:
-            name = event['summary']
-            start = date_parse(event['start'].get('date')).date()
-            end = date_parse(event['end'].get('date')).date()
-            length = (end - start).days
-            for i in range(length):
-                start = date_parse(event['start'].get('date')).date()+timedelta(days=i)
-                newEvent = {'name': name, 'start': start}
-
-                newSubOrgEvents['ALL'].append(newEvent)
-                for org in newSubOrgEvents:
-                    if org in name:
-                        newSubOrgEvents[org].append(newEvent)
-                if "FAHM" in name and "FSA" not in name:
-                    newSubOrgEvents['FSA'].append(newEvent)
-        except:
-            pass
-
-    global subOrgEvents
-    subOrgEvents = newSubOrgEvents
-
-def get_events_embed(header: str, suborg: str = 'ALL', timeframe: str = ''):
-    timeframes = {"TODAY": date.today(), "TOMORROW": date.today()+timedelta(1), "WEEK": date.today()+timedelta(7), "THIS WEEK": date.today()+timedelta(7)}
-
-    try:
-        eventList = [event for event in subOrgEvents[suborg] if event['start']<=timeframes[timeframe.upper()]]
-    except:
-        eventList = subOrgEvents[suborg]
-
-    msg = '\n'
-    for event in eventList:
-        start = event['start'].strftime('%a, %b %d')
-        msg = f"{msg}\n{start}: **{event['name']}**"
-    
-    if msg == '\n':
-        msg = f"{msg}**No events!**"
-
-    return discord.Embed(title=header, description=msg, color=subOrgColors[suborg], timestamp=datetime.now())
-
-
-def get_daily_sms():
-    msg = "No events today!"
-    
-    tomorrow = date.today()+timedelta(days=1)
-    eventList = [event for event in eventList if event['start']<=tomorrow]
-    if len(eventList) > 0:
-        msg = "IMMEDIATE EVENTS\n"
-        for event in eventList:
-            start = event['start'].strftime('%a, %b %d')
-            msg = f"{msg}\n{start}: {event['name']}"
-    return msg
+midnight = time(9, 7, 0, 0, est)
+before_midnight = time(5, 6, 0, 0, est)
 
 @tasks.loop(time=midnight)
 async def send_daily_sms():
-    msg = get_daily_sms()
     verified_users = db.reference('users_sms/verified_users').get() or {}
-            
     new_invalid_users = {}
     for id in verified_users:
         try:
             twilio_client.messages \
                 .create(
-                    body=msg,
+                    body=SubOrgManager.get('AASU').str_msg(1),
                     from_ =  TWILIO_PHONE_NUMBER,
                     to = verified_users[id]
                 )
@@ -121,14 +40,12 @@ async def send_daily_sms():
 async def delete_last_daily(user: discord.User):
     channel = await bot.create_dm(user)
     history = await channel.history(limit=1).flatten()
-    if len(history) > 0 and len(history[0].embeds) > 0 and "__**IMMEDIATE EVENTS**__" in str(history[0].embeds[0].title):
+    if len(history) > 0 and len(history[0].embeds) > 0 and "Today" in str(history[0].embeds[0].author):
         await history[0].delete()
 
-#TESTED
 @tasks.loop(time=midnight)
 async def send_daily_discord():
-    header = "__**IMMEDIATE EVENTS**__"
-    embed = get_events_embed(header, timeframe = "tomorrow")
+    embed = SubOrgManager.get('AASU').embed_msg(1)
     
     data = db.reference('users_discord/id').get() or []
     invalid_indices = [] 
@@ -148,152 +65,31 @@ async def send_daily_discord():
 
 @bot.event
 async def on_ready():
-    print(f"Logged in as {bot.user}") 
-    await update_events()
-    update_events.start()
+    print(f"Logged in as {bot.user}")
+    print(SubOrgManager.str())
+    SubOrgManager.pull_events.start()
     send_daily_sms.start()
     send_daily_discord.start()
 
-@bot.command(description="Get events within the next month or optionally specify a sub-organization or timeframe.")
-async def events(ctx, timeframe: Option(str, "Get events within a certain timeframe (today, tomorrow, this week)", default=''), suborg: Option(str, "AASU sub-organization", default='ALL')):
-    suborg = suborg.upper()
-    timeframe = timeframe.upper()
-    if suborg in subOrgEvents:
-        timeframes = ['TODAY', 'TOMORROW', 'WEEK', 'THIS WEEK', '']
-        if timeframe in timeframes:
-            if timeframe == "WEEK":
-                timeframe = "THIS WEEK"
-            header = F"__**{suborg} EVENTS {timeframe}**__"
-            embed = get_events_embed(header, suborg, timeframe)
-            await ctx.respond(embed=embed)
-        else:
-            await send_error_msg(ctx, "Invalid timeframe.")
-    else:
-        await send_error_msg(ctx, "Invalid suborg.")
-
-
-@bot.command(description="Verify your phone number with the 6-digit code.")
-async def verify(ctx, code: Option(str, "6-digit code")):
-    user = ctx.author
-    user_id = str(user.id)
-
-    verified_ref = db.reference('users_sms/verified_users')
-    verified_users = verified_ref.get() or {}
-    pending_ref = db.reference('users_sms/pending_users')
-    pending_users = pending_ref.get() or {}
-
-    if user_id in pending_users:
-        if code.isnumeric() and len(code) == 6:
-            verifying_number = pending_users[user_id]
-            result = verify_service.verification_checks.create(to=verifying_number, code=code)
-            if result.status == 'approved':
-                verified_users[user_id] = verifying_number
-                del pending_users[user_id]
-                verified_ref.set(verified_users)
-                pending_ref.set(pending_users)
-
-                await send_success_msg(ctx, "You are now subscribed via SMS!")
-                
-            else:
-                await send_error_msg(ctx, "Invalid key. Please try again.")
-        else:
-            await send_error_msg(ctx, "Invalid key. Please make sure you enter the 6-digit key sent to your phone!")
-            
-    elif user_id in verified_users:
-        await send_error_msg(ctx, "You are already subscribed via SMS!")
-
-    else:
-        await send_error_msg(ctx, "Please begin verification using `/subscribe sms`.")
-
-
-subscribe = bot.create_group("subscribe", "Subscribe to event reminders.")
-
-@subscribe.command(description="Subscribe to event reminders via Discord.")
-async def disc(ctx):
-    user = ctx.author
-    ref = db.reference('users_discord/id')
-    data = ref.get() or []
-    if user.id in data:
-        await send_error_msg(ctx, "You are already subscribed!")
-    else:
-        data.append(user.id)
-        ref.set(data)
-        await send_success_msg(ctx, "You are now subscribed!")
-
-@subscribe.command(description="Subscribe to event reminders via SMS.")
-async def sms(ctx, number: Option(str, "Your phone number"), country_code: Option(str, "Your country code (default is '+1' for USA)", default="+1")):
-    user = ctx.author
-    number = country_code + number
-
-    try:    
-        is_valid_number = phonenumbers.is_possible_number(phonenumbers.parse(number)) and twilio_client.lookups.v2.phone_numbers(number).fetch().valid
-    except:
-        is_valid_number = False
-
-    if is_valid_number:
-        verified_users = db.reference('users_sms/verified_users').get() or {}
-
-        if str(user.id) in verified_users:
-            await send_error_msg(ctx, "You are already subscribed via SMS!")
-
-        else:
-            ref = db.reference('users_sms/pending_users')
-            data = ref.get() or {}
-            data[user.id] = number
-            ref.set(data)
-            verify_service.verifications.create(to=number, channel='sms')
-            await send_pending_msg(ctx, "Please enter the verification code sent to your phone number using `/verify`.")
-            
-    else:
-        await send_error_msg(ctx, "This phone number does not exist!")
-
-
-unsubscribe = bot.create_group("unsubscribe", "Unsubscribe from event reminders.")
-
-@unsubscribe.command(description="Unsubscribe from Discord event reminders.")
-async def disc(ctx):
-    user = ctx.author
-    ref = db.reference('users_discord/id')
-    data = ref.get()
-    try:
-        data.remove(user.id)
-        ref.set(data)        
-        await send_success_msg(ctx, "You are now unsubscribed.")
-    except:
-        await send_error_msg(ctx, "You are already unsubscribed.")
-
-@unsubscribe.command(description="Unsubscribe from SMS event reminders.")
-async def sms(ctx):
-    user = ctx.author
-    ref = db.reference('users_sms/verified_users')
-    data = ref.get() or {}
-
-    if str(user.id) in data:
-        del data[str(user.id)]
-        ref.set(data)
-        await send_success_msg(ctx, "You are now unsubscribed from SMS reminders.")
-    else:
-        await send_error_msg(ctx, "You are already unsubscribed from SMS reminders.")
-
-@bot.command(description="Get the link to AASU's calendar.")
-async def calendar(ctx):
-    await ctx.respond("[**UF AASU Calendar**](http://www.ufaasu.com/calendar/)")
+@bot.command(description="Get events within the next 30 days or specify a sub-organization or timeframe.")
+async def events(ctx, days: Option(int, "Get events within x number of days.", default=30), organization: Option(str, "AASU sub-organization.", default='AASU')):
+    org_name = organization.upper()
+    embed = SubOrgManager.embed(org_name, days)
+    await ctx.respond(embed=embed)
 
 @bot.command(description="Get a description of all the commands.")
 async def help(ctx):
-    await ctx.respond(
+    title = "**__AASU BOT COMMANDS__**"
+    commands = '''`/events [organization] [days]`: Get events within the next month or optionally specify a sub-organization or timeframe.
+  - Organizations: **AASU** | **CASA** | **HEAL** | **KUSA** | **FSA** | **FLP** | **VSO**
+
+`/subscribe`: Subscribe to Discord or SMS reminders.
+
+`/unsubscribe`: Unsubscribe from Discord or SMS reminders.
 '''
-**__COMMANDS__**
+    embed = discord.Embed(title=title, description=commands, color=discord.Color.dark_theme(), timestamp=datetime.now())
+    embed.set_footer(text='Help', icon_url='https://cdn0.iconfinder.com/data/icons/cosmo-symbols/40/help_1-512.png')
+    embed.set_thumbnail(url='https://i.imgur.com/i6fTLuY.png')
+    await ctx.respond(embed=embed)
 
-- `/events [suborg] [timeframe]`: Get events within the next month or optionally specify a sub-organization or timeframe.
-  - *Suborgs: AASU, CASA, HEAL, KUSA, FSA, FLP, VSO*
-  - *Timeframes: today, tomorrow, week*
-
-- `/calendar`: Get the link to AASU's calendar.
-
-- `/subscribe`: Subscribe to Discord or SMS reminders.
-
-- `/unsubscribe`: Unsubscribe from Discord or SMS reminders.
-''')
-
-bot.run(DISCORD_TEST_TOKEN)
+bot.run(DISCORD_TOKEN)
