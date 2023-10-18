@@ -12,7 +12,7 @@ Type `/help` to see an explanation of all of the commands!
 
 ## Commands
 - `/help`
-- `/events [timeframe] [suborg]`
+- `/events [organization] [timeframe]` or `/events`
 - `/subscribe sms [YOUR PHONE NUMBER]`
 - `/subscribe disc` 
 - `/unsubscribe sms`
