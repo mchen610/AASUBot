@@ -4,12 +4,14 @@ import asyncio
 from discord import Color, Embed
 from discord.ext import tasks
 
-from datetime import date, time, datetime, timedelta, timezone
+from datetime import time, datetime, timedelta, timezone
 from dateutil.parser import parse as date_parse
 
 from event import Event, EventList
-from config import google_service, get_weather
-from special_messages import get_error_msg
+from config import google_service
+from weather import get_weather
+from system_messages import get_error_msg
+from times import before_eight_am as loop_time
 
 
 est = timezone(timedelta(hours=-4))
@@ -41,12 +43,14 @@ class SubOrg:
     
     @staticmethod
     def timeframe_str(timeframe: int):
-        if timeframe == 0:
+        if timeframe == 1:
             return "TODAY"
+        elif timeframe == 2:
+            return "TODAY AND TOMORROW"
         elif timeframe == 7:
             return "THIS WEEK"
         else:
-            return f"WITHIN {timeframe} DAYS"
+            return f"WITHIN THE NEXT {timeframe} DAYS"
 
     def embed(self, timeframe: int = 7):
         if timeframe < 0:
@@ -56,26 +60,24 @@ class SubOrg:
         else:
             
             header = f"**__{self.name} EVENTS {self.__class__.timeframe_str(timeframe)}__**"
-            event_list = self.event_list.events_until(date.today() + timedelta(days=timeframe))
+            event_list = self.event_list.events_until(timeframe)
             embed = Embed(title=header, description=event_list.to_markdown(), color=self.color, timestamp=datetime.now())
 
             weather = get_weather()
-            desc, temp, icon_url = weather['desc'], weather['perceived_temp'], weather['icon_url']
-            embed.set_footer(text=f"{desc}, feels like {temp}°F", icon_url=icon_url)
+            desc, temp, icon_url, temp_emoji = weather['desc'], weather['temp'], weather['icon_url'], weather['temp_emoji']
+            embed.set_footer(text=f"{desc}, feels like {temp}°F {temp_emoji}", icon_url=icon_url)
             embed.set_author(name=f"Today is {datetime.now().strftime('%A, %b %d')}.")
             embed.set_thumbnail(url=self.img_url)
 
             return embed
-        
     
     def str_msg(self, timeframe: int = 7):
         if timeframe < 0 or timeframe > 90:
             return "Invalid timeframe."
-        
-        event_list = self.event_list.events_until(date.today() + timedelta(days=timeframe))
-        return f"{self.name} EVENTS WITHIN {timeframe} DAY(S)\n{event_list}"
 
-
+        header = f"{self.name} EVENTS {self.__class__.timeframe_str(timeframe)}"
+        event_list = self.event_list.events_until(timeframe)
+        return f"{header}\n\n{event_list}"
 
 class SubOrgManager:
     orgs = {
@@ -94,11 +96,11 @@ class SubOrgManager:
             org.event_list.clear()
 
     @classmethod
-    @tasks.loop(time=before_midnight)
+    @tasks.loop(time=loop_time)
     async def pull_events(cls):
         cls.reset_events()
 
-        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today = datetime.utcnow()
         time_min = today.isoformat() + 'Z'
         time_max = (today + timedelta(days=90)).isoformat() + 'Z'
         
@@ -140,7 +142,8 @@ class SubOrgManager:
         string = ''
         for org in cls.orgs.values():
             string = string + str(org) + '\n'
-        return string
+        return string[:-1]
+ 
     
 loop = asyncio.get_event_loop()
 loop.run_until_complete(SubOrgManager.pull_events())

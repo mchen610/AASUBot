@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from typing import List
 
 class Event:
@@ -26,7 +26,8 @@ class EventList:
     def add(self, event: Event) -> None:
         self.list.append(event)
 
-    def events_until(self, time_max: date) -> 'EventList':
+    def events_until(self, timeframe: int) -> 'EventList':
+        time_max = date.today() + timedelta(days=timeframe)
         for i in range(len(self.list)-1, -1, -1):
             if self.list[i].date_obj < time_max:
                 return EventList(self.list[:i+1])
@@ -39,7 +40,15 @@ class EventList:
 
         if string == "":
             return "N/A"
-        return string
+        return string[:-1]
+    
+    def sms_str(self) -> str:
+        string = ""
+        for event in self.list:
+            string = string + event.name.center(32, '-') + '\n'
+        if string == "":
+            return "N/A"
+        return string[:-1]
 
     def to_markdown(self) -> str:
         string = ""
@@ -48,4 +57,4 @@ class EventList:
 
         if string == "":
             return "**N/A**"
-        return string
+        return string[:-1]

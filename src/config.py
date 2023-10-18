@@ -2,7 +2,6 @@ from dotenv import load_dotenv
 import os
 
 import discord
-import requests
 from twilio.rest import Client
 import firebase_admin
 from firebase_admin import credentials
@@ -33,14 +32,5 @@ firebase_admin.initialize_app(cred, {'databaseURL': "https://aasu-discord-bot-de
 #GOOGLE CONFIG
 google_service = build('calendar', 'v3', developerKey=GOOGLE_CALENDAR_API_KEY)
 
-def get_weather():
-    response = requests.get(f"https://api.openweathermap.org/data/2.5/weather?q=Gainesville&appid={WEATHER_API_KEY}&units=imperial")
-    data = response.json()
-    try:
-        feels_like = data['main']['feels_like']
-        desc = data['weather'][0]['description'].capitalize()
-        icon_code = data['weather'][0]['icon']
-        return {'perceived_temp': feels_like, 'desc': desc, 'icon_url': f"http://openweathermap.org/img/wn/{icon_code}.png"}
-    except:
-        return {'perceived_temp': '', 'desc': '', 'icon_url': None}
+
     
