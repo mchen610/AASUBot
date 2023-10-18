@@ -83,9 +83,7 @@ async def on_ready():
     SubOrgManager.pull_events.start()
     send_daily_sms.start()
     send_daily_discord.start()
-    
-    await send_daily_discord()
-    await send_daily_sms()
+
 
 @bot.command(description="Get events within the next 30 days or specify a sub-organization or timeframe.")
 async def events(ctx, days: Option(int, "Get events within x number of days.", default=30), organization: Option(str, "AASU sub-organization.", default='AASU')):
