@@ -1,5 +1,6 @@
 from typing import Optional
 import asyncio
+import requests
 
 from discord import Color, Embed
 from discord.ext import tasks
@@ -18,7 +19,7 @@ before_midnight = time(5, 2, 0, 0, est)
 
 
 class SubOrg:
-    def __init__(self, extended_name: str, color: Color, img_url: str = None, keywords: set = None):
+    def __init__(self, extended_name: str, color: Color, instagram: str, img_url: str, keywords: set = None):
         name = ""
         for word in extended_name.split():
             name += word[0]
@@ -29,6 +30,8 @@ class SubOrg:
         self.keywords = keywords or set()
         self.keywords.add(name)
         self.event_list = EventList()
+
+        self.instagram = instagram
         self.img_url = img_url
 
     def __str__(self):
@@ -36,6 +39,15 @@ class SubOrg:
     
     def to_markdown(self):
         return f"__**{self.name.center(30, '-')}\n{'-'*30}\n**__{self.event_list.to_markdown()}"
+    
+    @staticmethod
+    def timeframe_str(timeframe: int):
+        if timeframe == 0:
+            return "TODAY"
+        elif timeframe == 7:
+            return "THIS WEEK"
+        else:
+            return f"WITHIN {timeframe} DAYS"
 
     def embed(self, timeframe: int = 7):
         if timeframe < 0:
@@ -43,7 +55,8 @@ class SubOrg:
         elif timeframe > 90:
             return get_error_msg("Please enter a positive integer below or equal to 90!")
         else:
-            header = f"**__{self.name} EVENTS WITHIN {timeframe} DAY(S)__**"
+            
+            header = f"**__{self.name} EVENTS {self.__class__.timeframe_str(timeframe)}__**"
             event_list = self.event_list.events_until(date.today() + timedelta(days=timeframe))
             embed = Embed(title=header, description=event_list.to_markdown(), color=self.color, timestamp=datetime.now())
 
@@ -67,13 +80,13 @@ class SubOrg:
 
 class SubOrgManager:
     orgs = {
-            'AASU': SubOrg('Asian American Student Union', Color.dark_magenta()),
-            'CASA': SubOrg('Chinese American Student Association', Color.yellow()),
-            'HEAL': SubOrg('Health Educated Asian Leaders', Color.green()),
-            'KUSA': SubOrg('Korean Undergraduate Student Association', Color.blue()),
-            'FSA': SubOrg('Filipino Student Association', Color.red(), keywords={'FAHM'}),
-            'FLP': SubOrg('First-Year Leadership Program', Color.from_rgb(150, 200, 255)),
-            'VSO': SubOrg('Vietnamese Student Organization', Color.orange())
+            'AASU': SubOrg('Asian American Student Union', Color.dark_magenta(), 'ufaasu', 'https://i.imgur.com/i6fTLuY.png'),
+            'CASA': SubOrg('Chinese American Student Association', Color.yellow(), 'ufcasa', 'https://i.imgur.com/R9oWQ8Z.png'),
+            'HEAL': SubOrg('Health Educated Asian Leaders', Color.green(), 'ufheal', 'https://i.imgur.com/gvdij9i.png'),
+            'KUSA': SubOrg('Korean Undergraduate Student Association', Color.blue(), 'ufkusa', 'https://i.imgur.com/6x8g4Jc.png'),
+            'FSA': SubOrg('Filipino Student Association', Color.red(), 'uffsa', 'https://i.imgur.com/SHNdQTR.png', {'FAHM'}),
+            'FLP': SubOrg('First-Year Leadership Program', Color.from_rgb(150, 200, 255), 'ufflp', 'https://i.imgur.com/LtJnLWk.png'),
+            'VSO': SubOrg('Vietnamese Student Organization', Color.gold(), 'ufvso', 'https://i.imgur.com/7GvIPS4.png')
     }
 
     @classmethod
