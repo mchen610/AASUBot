@@ -2,6 +2,7 @@ from system_messages import send_error_msg, send_pending_msg, send_success_msg
 from config import bot, verify_service, twilio_client
 from firebase_admin import db
 from discord import Option
+from twilio.base.exceptions import TwilioRestException
 import phonenumbers
 
 @bot.command(description="Verify your phone number with the 6-digit code.")
@@ -17,17 +18,21 @@ async def verify(ctx, code: Option(str, "6-digit code")):
     if user_id in pending_users:
         if code.isnumeric() and len(code) == 6:
             verifying_number = pending_users[user_id]
-            result = verify_service.verification_checks.create(to=verifying_number, code=code)
-            if result.status == 'approved':
-                verified_users[user_id] = verifying_number
-                del pending_users[user_id]
-                verified_ref.set(verified_users)
-                pending_ref.set(pending_users)
+            try:
+                result = verify_service.verification_checks.create(to=verifying_number, code=code)
+                if result.status == 'approved':
+                    verified_users[user_id] = verifying_number
+                    del pending_users[user_id]
+                    verified_ref.set(verified_users)
+                    pending_ref.set(pending_users)
 
-                await send_success_msg(ctx, "You are now subscribed via SMS!")
-                
-            else:
-                await send_error_msg(ctx, "Invalid key. Please try again.")
+                    await send_success_msg(ctx, "You are now subscribed via SMS!")
+                    
+                else:
+                    await send_error_msg(ctx, "Invalid key. Please try again.")
+                    
+            except TwilioRestException:
+                await send_error_msg(ctx, "Your time has passed. Please restart verification.")
         else:
             await send_error_msg(ctx, "Invalid key. Please make sure you enter the 6-digit key sent to your phone!")
             
