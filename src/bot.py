@@ -13,7 +13,6 @@ async def on_ready():
     SubOrgManager.pull_events.start()
     send_daily_sms.start()
     send_daily_discord.start()
-    await send_daily_sms()
 
 
 @bot.command(
@@ -42,7 +41,6 @@ async def events(ctx, organization: str, days: int):
     org_name = organization.upper()
     embed = SubOrgManager.embed(org_name, days)
     await ctx.respond(embed=embed)
-
 
 
 @bot.command(description="Get a description of all the commands.")
