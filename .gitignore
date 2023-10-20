@@ -1,2 +1,4 @@
 service_account_key.json
 .env
+.vscode
+src/__pycache__
