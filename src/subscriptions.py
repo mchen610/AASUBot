@@ -28,13 +28,15 @@ unsubscribe = bot.create_group("unsubscribe", "Unsubscribe from event reminders.
 @subscribe.command(description="Subscribe to event reminders via Discord.", name="discord")
 async def disc(ctx: Context):
     user = ctx.author
+    user_id = str(user.id)
     valid_users_ref = db.reference('discord/valid_users')
     valid_users = valid_users_ref.get() or {}
 
-    if user.id in valid_users:
+    if user_id in valid_users:
         await send_error_msg(ctx, "You are already subscribed!")
+
     else:
-        valid_users[user.id] = user.name
+        valid_users[user_id] = user.name
         valid_users_ref.set(valid_users)
         await send_success_msg(ctx, "You are now subscribed!")
 
@@ -42,12 +44,15 @@ async def disc(ctx: Context):
 @unsubscribe.command(description="Unsubscribe from Discord event reminders.", name="discord")
 async def disc(ctx: Context):
     user = ctx.author
+    user_id = str(user.id)
     ref = db.reference('discord/valid_users')
     valid_users = ref.get()
+
     try:
-        del valid_users[user.id]
+        del valid_users[user_id]
         ref.set(valid_users)        
         await send_success_msg(ctx, "You are now unsubscribed.")
+
     except:
         await send_error_msg(ctx, "You are already unsubscribed.")
 
@@ -122,6 +127,7 @@ async def delete_last_daily(user: User):
 @subscribe.command(description="Subscribe to event reminders via SMS.")
 async def sms(ctx: Context, number: Option(str, "Your phone number"), country_code: Option(str, "Your country code (default is '+1' for USA)", default="+1")):
     user = ctx.author
+    user_id = str(user.id)
     number = country_code + number
 
     try:    
@@ -132,14 +138,14 @@ async def sms(ctx: Context, number: Option(str, "Your phone number"), country_co
     if is_valid_number:
         verified_users = db.reference('sms/verified_users').get() or {}
 
-        if str(user.id) in verified_users:
+        if user_id in verified_users:
             await send_error_msg(ctx, "You are already subscribed via SMS!")
 
         else:
             pending_users_ref = db.reference('sms/pending_users')
             pending_users = pending_users_ref.get() or {}
-            
-            pending_users[user.id] = number
+
+            pending_users[user_id] = number
             pending_users_ref.set(pending_users)
             verify_service.verifications.create(to=number, channel='sms')
             await send_pending_msg(ctx, "Please enter the verification code sent to your phone number using `/verify`.")
@@ -151,11 +157,13 @@ async def sms(ctx: Context, number: Option(str, "Your phone number"), country_co
 @unsubscribe.command(description="Unsubscribe from SMS event reminders.")
 async def sms(ctx: Context):
     user = ctx.author
+    user_id = str(user.id)
+    
     verified_users_ref = db.reference('sms/verified_users')
     verified_users = verified_users_ref.get() or {}
 
-    if str(user.id) in verified_users:
-        del verified_users[str(user.id)]
+    if user_id in verified_users:
+        del verified_users[user_id]
         verified_users_ref.set(verified_users)
 
         await send_success_msg(ctx, "You are now unsubscribed from SMS reminders.")
