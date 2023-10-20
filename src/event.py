@@ -26,8 +26,8 @@ class EventList:
     def add(self, event: Event) -> None:
         self.list.append(event)
 
-    def events_until(self, timeframe: int) -> 'EventList':
-        time_max = date.today() + timedelta(days=timeframe)
+    def events_until(self, days: int) -> 'EventList':
+        time_max = date.today() + timedelta(days=days)
         for i in range(len(self.list)-1, -1, -1):
             if self.list[i].date_obj < time_max:
                 return EventList(self.list[:i+1])

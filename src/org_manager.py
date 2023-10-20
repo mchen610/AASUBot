@@ -11,7 +11,7 @@ from event import Event, EventList
 from config import google_service
 from weather import get_weather
 from system_messages import get_error_msg
-from times import before_eight_am as loop_time
+from times import before_midnight as loop_time
 
 
 est = timezone(timedelta(hours=-4))
@@ -42,25 +42,25 @@ class SubOrg:
         return f"__**{self.name.center(30, '-')}\n{'-'*30}\n**__{self.event_list.to_markdown()}"
     
     @staticmethod
-    def timeframe_str(timeframe: int):
-        if timeframe == 1:
+    def timeframe_str(days: int):
+        if days == 1:
             return "TODAY"
-        elif timeframe == 2:
+        elif days == 2:
             return "TODAY AND TOMORROW"
-        elif timeframe == 7:
+        elif days == 7:
             return "THIS WEEK"
         else:
-            return f"WITHIN THE NEXT {timeframe} DAYS"
+            return f"WITHIN THE NEXT {days} DAYS"
 
-    def embed(self, timeframe: int = 7):
-        if timeframe < 0:
+    def embed(self, days: int = 7):
+        if days < 0:
             return get_error_msg("Please enter a positive integer!")
-        elif timeframe > 90:
+        elif days > 90:
             return get_error_msg("Please enter a positive integer below or equal to 90!")
         else:
             
-            header = f"**__{self.name} EVENTS {self.__class__.timeframe_str(timeframe)}__**"
-            event_list = self.event_list.events_until(timeframe)
+            header = f"**__{self.name} EVENTS {self.__class__.timeframe_str(days)}__**"
+            event_list = self.event_list.events_until(days)
             embed = Embed(title=header, description=event_list.to_markdown(), color=self.color, timestamp=datetime.now())
 
             weather = get_weather()
@@ -71,15 +71,17 @@ class SubOrg:
 
             return embed
     
-    def str_msg(self, timeframe: int = 7):
-        if timeframe < 0 or timeframe > 90:
-            return "Invalid timeframe."
+    def str_msg(self, days: int = 7):
+        if days < 0 or days > 90:
+            return "Invalid days."
 
-        header = f"{self.name} EVENTS {self.__class__.timeframe_str(timeframe)}"
-        event_list = self.event_list.events_until(timeframe)
+        header = f"{self.name} EVENTS {self.__class__.timeframe_str(days)}"
+        event_list = self.event_list.events_until(days)
         return f"{header}\n\n{event_list}"
 
 class SubOrgManager:
+
+    # Initialize the organizations with their name, color, instagram handle, an image link of their logo, and any related keywords to search for when pulling events
     orgs = {
             'AASU': SubOrg('Asian American Student Union', Color.dark_magenta(), 'ufaasu', 'https://i.imgur.com/i6fTLuY.png'),
             'CASA': SubOrg('Chinese American Student Association', Color.yellow(), 'ufcasa', 'https://i.imgur.com/R9oWQ8Z.png'),
@@ -91,14 +93,18 @@ class SubOrgManager:
     }
 
     @classmethod
-    def reset_events(cls):
+    def clear_events(cls):
+        """Clears every SubOrg instance's event list."""
+
         for org in cls.orgs.values():
             org.event_list.clear()
 
     @classmethod
     @tasks.loop(time=loop_time)
     async def pull_events(cls):
-        cls.reset_events()
+        """Updates events in each SubOrg instance every 24 hours at 12 A.M. in case any events were created or updated"""
+
+        cls.clear_events()
 
         today = datetime.utcnow()
         time_min = today.isoformat() + 'Z'
@@ -123,10 +129,12 @@ class SubOrgManager:
                 pass
 
     @classmethod
-    def embed(cls, org_name: str = 'AASU', timeframe: int = 7):
+    def embed(cls, org_name: str = 'AASU', days: int = 7):
+        """Returns a discord.Embed object containing events specific to a given organization and days."""
+
         org = cls.get(org_name)
         if org:
-            return org.embed(timeframe)
+            return org.embed(days)
         return get_error_msg("Invalid organization name.")
     
     @classmethod
