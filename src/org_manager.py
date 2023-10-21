@@ -84,9 +84,9 @@ class SubOrgManager:
     # Initialize the organizations with their name, color, instagram handle, an image link of their logo, and any related keywords to search for when pulling events
     orgs = {
             'AASU': SubOrg('Asian American Student Union', Color.dark_magenta(), 'ufaasu', 'https://i.imgur.com/i6fTLuY.png'),
-            'CASA': SubOrg('Chinese American Student Association', Color.yellow(), 'ufcasa', 'https://i.imgur.com/R9oWQ8Z.png'),
+            'CASA': SubOrg('Chinese American Student Association', Color.yellow(), 'ufcasa', 'https://i.imgur.com/EJCC0k6.png'),
             'HEAL': SubOrg('Health Educated Asian Leaders', Color.green(), 'ufheal', 'https://i.imgur.com/gvdij9i.png'),
-            'KUSA': SubOrg('Korean Undergraduate Student Association', Color.blue(), 'ufkusa', 'https://i.imgur.com/6x8g4Jc.png'),
+            'KUSA': SubOrg('Korean Undergraduate Student Association', Color.blue(), 'ufkusa', 'https://i.imgur.com/Ccyjl4f.png'),
             'FSA': SubOrg('Filipino Student Association', Color.red(), 'uffsa', 'https://i.imgur.com/SHNdQTR.png', {'FAHM'}),
             'FLP': SubOrg('First-Year Leadership Program', Color.from_rgb(150, 200, 255), 'ufflp', 'https://i.imgur.com/LtJnLWk.png'),
             'VSO': SubOrg('Vietnamese Student Organization', Color.gold(), 'ufvso', 'https://i.imgur.com/7GvIPS4.png')
@@ -106,7 +106,7 @@ class SubOrgManager:
 
         cls.clear_events()
 
-        today = datetime.utcnow()
+        today = datetime.utcnow() + timedelta(minutes=1)
         time_min = today.isoformat() + 'Z'
         time_max = (today + timedelta(days=90)).isoformat() + 'Z'
         

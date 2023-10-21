@@ -147,6 +147,7 @@ async def sms(ctx: Context, number: Option(str, "Your phone number"), country_co
 
             pending_users[user_id] = number
             pending_users_ref.set(pending_users)
+            
             verify_service.verifications.create(to=number, channel='sms')
             await send_pending_msg(ctx, "Please enter the verification code sent to your phone number using `/verify`.")
             
@@ -158,7 +159,7 @@ async def sms(ctx: Context, number: Option(str, "Your phone number"), country_co
 async def sms(ctx: Context):
     user = ctx.author
     user_id = str(user.id)
-    
+
     verified_users_ref = db.reference('sms/verified_users')
     verified_users = verified_users_ref.get() or {}
 
