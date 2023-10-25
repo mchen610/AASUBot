@@ -61,13 +61,9 @@ async def disc(ctx: Context):
 async def send_daily_discord():
     """Scheduled task to send daily Discord notifications to valid users.
 
-    This task fetches an embed of 'AASU' events on the current day. If the embed
-    is valid (not marked as "N/A"), it is sent to all valid users. If the embed 
-    fails to send for any user, that user is moved to an 'invalid_users' dict.
+    This task fetches an embed of 'AASU' events on the current day. If the task
+    fails to fetch a user, that user is moved to an 'invalid_users' dict.
 
-    Raises:
-        Any exceptions raised by the bot's send or fetch methods will be caught 
-        and handled by marking users as invalid.
     """
 
     # Fetch embed for 'AASU' events within 1 day (today)

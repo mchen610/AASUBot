@@ -99,11 +99,10 @@ class SubOrgManager:
             org.event_list.clear()
 
     @classmethod
-    @tasks.loop(seconds=30)
+    @tasks.loop(time=loop_time)
     async def pull_events(cls):
         """Updates events in each SubOrg instance every 24 hours at 12 A.M. in case any events were created or updated"""
 
-        await cls.clear_events()
 
         today = datetime.utcnow() + timedelta(hours=1)
         time_min = today.isoformat() + 'Z'

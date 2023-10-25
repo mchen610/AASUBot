@@ -38,7 +38,6 @@ async def on_ready():
 )
 async def events(ctx, organization: str, days: int):
     """Fetch and display events from a specified sub-organization within a given timeframe."""
-    print(SubOrgManager.orgs['AASU'].event_list)
     org_name = organization.upper()
     embed = SubOrgManager.embed(org_name, days)
     await ctx.respond(embed=embed)
