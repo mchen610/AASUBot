@@ -93,18 +93,17 @@ class SubOrgManager:
     }
 
     @classmethod
-    def clear_events(cls):
+    async def clear_events(cls):
         """Clears every SubOrg instance's event list."""
-
         for org in cls.orgs.values():
             org.event_list.clear()
 
     @classmethod
-    @tasks.loop(time=loop_time)
+    @tasks.loop(seconds=30)
     async def pull_events(cls):
         """Updates events in each SubOrg instance every 24 hours at 12 A.M. in case any events were created or updated"""
 
-        cls.clear_events()
+        await cls.clear_events()
 
         today = datetime.utcnow() + timedelta(hours=1)
         time_min = today.isoformat() + 'Z'
@@ -153,5 +152,3 @@ class SubOrgManager:
         return string[:-1]
  
     
-loop = asyncio.get_event_loop()
-loop.run_until_complete(SubOrgManager.pull_events())

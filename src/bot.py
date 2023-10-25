@@ -10,6 +10,7 @@ from subscriptions import *
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}")
+    await SubOrgManager.pull_events()
     SubOrgManager.pull_events.start()
     send_daily_sms.start()
     send_daily_discord.start()
@@ -37,7 +38,7 @@ async def on_ready():
 )
 async def events(ctx, organization: str, days: int):
     """Fetch and display events from a specified sub-organization within a given timeframe."""
-    
+    print(SubOrgManager.orgs['AASU'].event_list)
     org_name = organization.upper()
     embed = SubOrgManager.embed(org_name, days)
     await ctx.respond(embed=embed)
