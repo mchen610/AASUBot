@@ -22,6 +22,7 @@ class EventList:
 
     def clear(self) -> None:
         self.list.clear()
+        self.list = []
 
     def add(self, event: Event) -> None:
         self.list.append(event)
