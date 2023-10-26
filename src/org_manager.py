@@ -12,6 +12,7 @@ from config import google_service
 from weather import get_weather
 from system_messages import get_error_msg
 from times import before_midnight as loop_time
+from times import est
 
 
 est = timezone(timedelta(hours=-4))
@@ -61,13 +62,13 @@ class SubOrg:
             
             header = f"**__{self.name} EVENTS {self.__class__.timeframe_str(days)}__**"
             event_list = self.event_list.events_until(days)
-            embed = Embed(title=header, description=event_list.to_markdown(), color=self.color, timestamp=datetime.now())
-
             weather = get_weather()
             desc, temp, icon_url, temp_emoji = weather['desc'], weather['temp'], weather['icon_url'], weather['temp_emoji']
-            embed.set_footer(text=f"{desc}, feels like {temp}°F {temp_emoji}", icon_url=icon_url)
-            embed.set_author(name=f"Today is {datetime.now().strftime('%A, %b %d')}.")
+            
+            embed = Embed(title=header, description=event_list.to_markdown(), color=self.color, timestamp=datetime.now())
+            embed.set_author(name=f"Today is {datetime.now(tz=est).strftime('%A, %b %d')}.")
             embed.set_thumbnail(url=self.img_url)
+            embed.set_footer(text=f"{desc}, feels like {temp}°F {temp_emoji}", icon_url=icon_url)
 
             return embed
     
