@@ -44,14 +44,14 @@ def get_emoji(icon_code: str, moon_phase: float):
         return _emojis[icon_code]
 
 
-def temp_emoji(feels_like: float):
-    if feels_like > 90:
+def temp_emoji(temp: float):
+    if temp > 90:
         return "🔥"
 
-    elif 50 <= feels_like <= 90:
+    elif 50 <= temp <= 90:
         return "😌"
 
-    elif feels_like < 50:
+    elif temp < 50:
         return "🧊"
 
 
@@ -62,21 +62,21 @@ def get_weather():
     data = response.json()
 
     try:
-        feels_like = data['current']["feels_like"]
+        temp = data['current']["temp"]
         desc = data['current']["weather"][0]["description"].capitalize()
         icon_code = data['current']["weather"][0]["icon"]
         moon_phase = data['daily'][0]["moon_phase"]
         emoji = get_emoji(icon_code, moon_phase)
         return {
-            "temp": feels_like,
+            "temp": temp,
             "desc": desc,
             "icon_url": f"http://openweathermap.org/img/wn/{icon_code}.png",
             "emoji": emoji,
-            "temp_emoji": temp_emoji(feels_like),
+            "temp_emoji": temp_emoji(temp),
         }
     
     except Exception:
-        return {"temp": "80", "desc": "Feels normal I hope (I messed up)", "icon_url": "http://openweathermap.org/img/wn/04d.png", "emoji": "☁️", "temp_emoji": "😌"}
+        return {"temp": "80", "desc": "It's normal I hope (I messed up)", "icon_url": "http://openweathermap.org/img/wn/04d.png", "emoji": "☁️", "temp_emoji": "😌"}
 
 
 def get_weather_msg():
@@ -87,5 +87,5 @@ def get_weather_msg():
     emoji = weather["emoji"]
     temp_emoji = weather["temp_emoji"]
 
-    weather_msg = f"{emoji} {desc}, feels like {temp}°F {temp_emoji}"
+    weather_msg = f"{emoji} {desc}: it's {temp}°F {temp_emoji}"
     return weather_msg
