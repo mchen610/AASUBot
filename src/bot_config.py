@@ -31,13 +31,13 @@ orgs = {
         'VSO': SubOrg('Vietnamese Student Organization', Color.gold(), 'ufvso', 'https://i.imgur.com/7GvIPS4.png')
 }
 
-AASUManager = SubOrgManager(orgs, 'AASU', 'aasu.uf@gmail.com', google_service)
+AASUManager = SubOrgManager(orgs, 'AASU', 'aasu.uf@gmail.com', google_service, lat=29.65, lon=-82.34)
 
 # Command groups
 subscribe = bot.create_group("subscribe", "Subscribe to event reminders.")
 unsubscribe = bot.create_group("unsubscribe", "Unsubscribe from event reminders.")
 
-# --- DISCORD FUNCTIONS ---
+# --- DISCORD FUNCTIONS --- #
 
 @subscribe.command(description="Subscribe to event reminders via Discord.", name="discord")
 async def disc(ctx: Context):
@@ -132,7 +132,7 @@ async def delete_last_daily(user: User):
     except:
         pass
 
-# --- SMS FUNCTIONS ---
+# --- SMS FUNCTIONS --- #
 
 @subscribe.command(description="Subscribe to event reminders via SMS.")
 async def sms(ctx: Context, number: Option(str, "Your phone number"), country_code: Option(str, "Your country code (default is '+1' for USA)", default="+1")):
@@ -235,7 +235,7 @@ async def send_daily_sms():
     if "N/A" not in events_msg:
         today = date.today().strftime('%b %d')
         header = f"✨ Events today, {today} ✨"
-        complete_msg = f"{header.center(30, '_')}\n{events_msg}\n{get_weather_msg()}"
+        complete_msg = f"{header.center(30, '_')}\n{events_msg}\n{get_weather_msg(AASUManager.lat, AASUManager.lon)}"
 
         verified_users_ref = db.reference('sms/verified_users')
         verified_users = verified_users_ref.get() or {}

@@ -1,5 +1,6 @@
 from config import WEATHER_API_KEY
 import requests
+from discord import Embed
 
 _emojis = {
     "01d": "☀️",
@@ -55,9 +56,9 @@ def temp_emoji(temp: float):
         return "🧊"
 
 
-def get_weather():
+def get_weather(lat: float, lon: float):
     response = requests.get(
-        f"https://api.openweathermap.org/data/2.5/onecall?lat=29.65&lon=-82.34&exclude=minutely,hourly&appid={WEATHER_API_KEY}&units=imperial"
+        f"https://api.openweathermap.org/data/2.5/onecall?lat={lat}&lon={lon}&exclude=minutely,hourly&appid={WEATHER_API_KEY}&units=imperial"
     )
     data = response.json()
 
@@ -79,9 +80,8 @@ def get_weather():
         return {"temp": "80", "desc": "It's normal I hope (I messed up)", "icon_url": "http://openweathermap.org/img/wn/04d.png", "emoji": "☁️", "temp_emoji": "😌"}
 
 
-def get_weather_msg():
-    weather = get_weather()
-    
+def get_weather_msg(lat: float, lon: float):
+    weather = get_weather(lat, lon)
     desc = weather["desc"]
     temp = weather["temp"]
     emoji = weather["emoji"]
@@ -89,3 +89,12 @@ def get_weather_msg():
 
     weather_msg = f"{emoji} {desc}: it's {temp}°F {temp_emoji}"
     return weather_msg
+
+def set_weather_footer(embed: Embed, lat: float, lon: float):
+    weather = get_weather(lat, lon)
+    desc = weather["desc"]
+    temp = weather["temp"]
+    icon_url = weather["icon_url"]
+    temp_emoji = weather["temp_emoji"]
+
+    embed.set_footer(text=f"{desc}: it's {temp}°F {temp_emoji}", icon_url=icon_url)

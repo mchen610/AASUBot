@@ -28,7 +28,7 @@ verify_service = twilio_client.verify.v2.services(TWILIO_VERIFY_SID)
 
 #FIREBASE CONFIG
 cred = credentials.Certificate("service_account_key.json") 
-firebase_admin.initialize_app(cred)
+firebase_admin.initialize_app(cred, {"databaseURL": FIREBASE_REALTIME_DATABASE_URL})
 
 #GOOGLE CONFIG
 google_service: Resource = build('calendar', 'v3', developerKey=GOOGLE_CALENDAR_API_KEY)

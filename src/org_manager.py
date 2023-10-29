@@ -8,7 +8,7 @@ from datetime import time, datetime, timedelta, timezone
 from dateutil.parser import parse as date_parse
 
 from event import Event, EventList
-from weather import get_weather
+from weather import set_weather_footer
 from system_messages import get_error_msg
 from times import before_midnight as loop_time
 from times import est
@@ -52,7 +52,7 @@ class SubOrg:
         else:
             return f"WITHIN THE NEXT {days} DAYS"
 
-    def embed(self, days: int = 7):
+    def embed(self, lat: float, lon: float, days: int = 7):
         if days < 0:
             return get_error_msg("Please enter a positive integer!")
         elif days > 90:
@@ -61,13 +61,11 @@ class SubOrg:
             
             header = f"**__{self.name} EVENTS {self.__class__.timeframe_str(days)}__**"
             event_list = self.event_list.events_until(days)
-            weather = get_weather()
-            desc, temp, icon_url, temp_emoji = weather['desc'], weather['temp'], weather['icon_url'], weather['temp_emoji']
             
             embed = Embed(title=header, description=event_list.to_markdown(), color=self.color, timestamp=datetime.now())
             embed.set_author(name=f"Today is {datetime.now(tz=est).strftime('%A, %b %d')}.")
             embed.set_thumbnail(url=self.img_url)
-            embed.set_footer(text=f"{desc}, feels like {temp}°F {temp_emoji}", icon_url=icon_url)
+            set_weather_footer(embed, lat, lon)
 
             return embed
     
@@ -80,11 +78,13 @@ class SubOrg:
         return f"{header}\n\n{event_list}"
 
 class SubOrgManager:
-    def __init__(self, orgs: dict[str, SubOrg], default_org: str, calendar_id: str, google_service: Resource):
+    def __init__(self, orgs: dict[str, SubOrg], default_org: str, calendar_id: str, google_service: Resource, lat: float, lon: float):
         self.orgs = orgs
         self.default_org = default_org
         self.calendar_id = calendar_id 
         self.google_service = google_service
+        self.lat = lat
+        self.lon = lon
 
     def clear_events(self):
         """Clears every SubOrg instance's event list."""
@@ -125,7 +125,7 @@ class SubOrgManager:
 
         org = self.get(org_name)
         if org:
-            return org.embed(days)
+            return org.embed(self.lat, self.lon, days)
         return get_error_msg("Invalid organization name.")
     
     def get(self, org_name) -> Optional[SubOrg]:
