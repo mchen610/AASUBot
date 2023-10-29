@@ -1,5 +1,5 @@
 from typing import Optional
-import asyncio
+from googleapiclient.discovery import Resource
 
 from discord import Color, Embed
 from discord.ext import tasks
@@ -8,7 +8,6 @@ from datetime import time, datetime, timedelta, timezone
 from dateutil.parser import parse as date_parse
 
 from event import Event, EventList
-from config import google_service
 from weather import get_weather
 from system_messages import get_error_msg
 from times import before_midnight as loop_time
@@ -81,36 +80,28 @@ class SubOrg:
         return f"{header}\n\n{event_list}"
 
 class SubOrgManager:
+    def __init__(self, orgs: dict[str, SubOrg], default_org: str, calendar_id: str, google_service: Resource):
+        self.orgs = orgs
+        self.default_org = default_org
+        self.calendar_id = calendar_id 
+        self.google_service = google_service
 
-    # Initialize the organizations with their name, color, instagram handle, an image link of their logo, and any related keywords to search for when pulling events
-    orgs = {
-            'AASU': SubOrg('Asian American Student Union', Color.dark_magenta(), 'ufaasu', 'https://i.imgur.com/i6fTLuY.png'),
-            'CASA': SubOrg('Chinese American Student Association', Color.yellow(), 'ufcasa', 'https://i.imgur.com/R9oWQ8Z.png'),
-            'HEAL': SubOrg('Health Educated Asian Leaders', Color.green(), 'ufheal', 'https://i.imgur.com/gvdij9i.png'),
-            'KUSA': SubOrg('Korean Undergraduate Student Association', Color.blue(), 'ufkusa', 'https://i.imgur.com/zNME2LE.png'),
-            'FSA': SubOrg('Filipino Student Association', Color.red(), 'uffsa', 'https://i.imgur.com/SHNdQTR.png', {'FAHM'}),
-            'FLP': SubOrg('First-Year Leadership Program', Color.from_rgb(150, 200, 255), 'ufflp', 'https://i.imgur.com/LtJnLWk.png'),
-            'VSO': SubOrg('Vietnamese Student Organization', Color.gold(), 'ufvso', 'https://i.imgur.com/7GvIPS4.png')
-    }
-
-    @classmethod
-    def clear_events(cls):
+    def clear_events(self):
         """Clears every SubOrg instance's event list."""
-        for org in cls.orgs.values():
+        for org in self.orgs.values():
             org.event_list.clear()
 
-    @classmethod
     @tasks.loop(time=loop_time)
-    async def pull_events(cls):
+    async def pull_events(self):
         """Updates events in each SubOrg instance every 24 hours at 12 A.M. in case any events were created or updated"""
 
-        cls.clear_events()
+        self.clear_events()
 
         today = datetime.utcnow() + timedelta(hours=1)
         time_min = today.isoformat() + 'Z'
         time_max = (today + timedelta(days=90)).isoformat() + 'Z'
         
-        raw_events = google_service.events().list(calendarId='aasu.uf@gmail.com', timeMin=time_min, timeMax=time_max, singleEvents=True, orderBy='startTime').execute().get('items', [])
+        raw_events = self.google_service.events().list(calendarId=self.calendar_id, timeMin=time_min, timeMax=time_max, singleEvents=True, orderBy='startTime').execute().get('items', [])
 
         for event in raw_events:
             try:
@@ -121,34 +112,31 @@ class SubOrgManager:
                     date_obj = date_parse(event['start'].get('date')).date()+timedelta(days=i)
                     new_event = Event(event_name, date_obj)
 
-                    for org in cls.orgs.values():
-                        if org.name == 'AASU' or org.keywords & set(event_name.split()):
+                    for org in self.orgs.values():
+                        if org.name == self.default_org or org.keywords & set(event_name.split()):
                             org.event_list.add(new_event)
 
             except:
                 pass
 
-    @classmethod
-    def embed(cls, org_name: str = 'AASU', days: int = 7):
+    def embed(self, org_name: str = None, days: int = 7):
         """Returns a discord.Embed object containing events specific to a given organization and days."""
+        org = org_name or self.default_org
 
-        org = cls.get(org_name)
+        org = self.get(org_name)
         if org:
             return org.embed(days)
         return get_error_msg("Invalid organization name.")
     
-    @classmethod
-    def get(cls, org_name) -> Optional[SubOrg]:
-        return cls.orgs.get(org_name.upper(), None)     
+    def get(self, org_name) -> Optional[SubOrg]:
+        return self.orgs.get(org_name.upper(), None)     
     
-    @classmethod
-    def __getitem__(cls, org_name) -> Optional[SubOrg]:
-        return cls.get(org_name)
+    def __getitem__(self, org_name) -> Optional[SubOrg]:
+        return self.get(org_name)
     
-    @classmethod
-    def str(cls):
+    def str(self):
         string = ''
-        for org in cls.orgs.values():
+        for org in self.orgs.values():
             string = string + str(org) + '\n'
         return string[:-1]
  

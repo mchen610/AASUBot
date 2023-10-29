@@ -1,5 +1,5 @@
 from datetime import date, timedelta
-from typing import List
+from typing import List, Optional
 
 class Event:
     def __init__(self, name: str, date_obj: date) -> None:
@@ -14,15 +14,14 @@ class Event:
         return f"`{self.date_str}`: **{self.name}**"
 
 class EventList:
-    def __init__(self, event_list: List[Event] = []) -> None:
-        self.list = event_list
+    def __init__(self, event_list: Optional[List[Event]] = None) -> None:
+        self.list = event_list or []
 
     def set(self, event_list: List[Event]) -> None:
         self.list = event_list
 
     def clear(self) -> None:
         self.list.clear()
-        self.list = []
 
     def add(self, event: Event) -> None:
         self.list.append(event)
@@ -32,21 +31,13 @@ class EventList:
         for i in range(len(self.list)-1, -1, -1):
             if self.list[i].date_obj < time_max:
                 return EventList(self.list[:i+1])
-        return EventList()
-            
-    def __str__(self) -> str:
-        string = ""
-        for event in self.list:
-            string = string + str(event) + '\n'
-
-        if string == "":
-            return "N/A"
-        return string[:-1]
+        return EventList()            
     
     def sms_str(self) -> str:
         string = ""
         for event in self.list:
             string = string + event.name.center(32, '-') + '\n'
+            
         if string == "":
             return "N/A"
         return string[:-1]
@@ -58,4 +49,13 @@ class EventList:
 
         if string == "":
             return "**N/A**"
+        return string[:-1]
+
+    def __str__(self) -> str:
+        string = ""
+        for event in self.list:
+            string = string + str(event) + '\n'
+
+        if string == "":
+            return "N/A"
         return string[:-1]

@@ -1,23 +1,37 @@
 from datetime import date
 
 # Discord related imports
-from discord import Option, User, errors
+from discord import Color, Option, User, errors
 from discord.ext import tasks
 from discord.ext.commands import Context
-from config import verify_service, twilio_client, TWILIO_PHONE_NUMBER
-
+from config import bot
 
 # Phone number verification imports
 from twilio.base.exceptions import TwilioRestException
 import phonenumbers
-from config import bot
+from config import verify_service, twilio_client, TWILIO_PHONE_NUMBER
 
 # Utility imports
 from system_messages import send_error_msg, send_pending_msg, send_success_msg
 from weather import get_weather_msg
-from org_manager import SubOrgManager
+from config import google_service
+from org_manager import SubOrg, SubOrgManager
 from times import eight_am as loop_time
 from firebase_admin import db
+
+#SUBORGMANAGER CONFIG
+# Initialize the organizations with their name, color, instagram handle, an image link of their logo, and any related keywords to search for when pulling events
+orgs = {
+        'AASU': SubOrg('Asian American Student Union', Color.dark_magenta(), 'ufaasu', 'https://i.imgur.com/i6fTLuY.png'),
+        'CASA': SubOrg('Chinese American Student Association', Color.yellow(), 'ufcasa', 'https://i.imgur.com/R9oWQ8Z.png'),
+        'HEAL': SubOrg('Health Educated Asian Leaders', Color.green(), 'ufheal', 'https://i.imgur.com/gvdij9i.png'),
+        'KUSA': SubOrg('Korean Undergraduate Student Association', Color.blue(), 'ufkusa', 'https://i.imgur.com/zNME2LE.png'),
+        'FSA': SubOrg('Filipino Student Association', Color.red(), 'uffsa', 'https://i.imgur.com/SHNdQTR.png', {'FAHM'}),
+        'FLP': SubOrg('First-Year Leadership Program', Color.from_rgb(150, 200, 255), 'ufflp', 'https://i.imgur.com/LtJnLWk.png'),
+        'VSO': SubOrg('Vietnamese Student Organization', Color.gold(), 'ufvso', 'https://i.imgur.com/7GvIPS4.png')
+}
+
+AASUManager = SubOrgManager(orgs, 'AASU', 'aasu.uf@gmail.com', google_service)
 
 # Command groups
 subscribe = bot.create_group("subscribe", "Subscribe to event reminders.")
@@ -67,7 +81,7 @@ async def send_daily_discord():
     """
 
     # Fetch embed for 'AASU' events within 1 day (today)
-    embed = SubOrgManager.get('AASU').embed(days=1)
+    embed = AASUManager.get('AASU').embed(days=1)
 
     # Check if there are any events
     if "N/A" not in embed.description:
@@ -216,7 +230,7 @@ async def verify(ctx, code: Option(str, "6-digit code", min_length=6, max_length
 
 @tasks.loop(time=loop_time)
 async def send_daily_sms():
-    events_msg = SubOrgManager.get('AASU').event_list.events_until(1).sms_str()
+    events_msg = AASUManager.get('AASU').event_list.events_until(1).sms_str()
 
     if "N/A" not in events_msg:
         today = date.today().strftime('%b %d')
