@@ -81,7 +81,7 @@ async def send_daily_discord():
     """
 
     # Fetch embed for 'AASU' events within 1 day (today)
-    embed = AASUManager.get('AASU').embed(days=1)
+    embed = AASUManager.embed('AASU', days=1)
 
     # Check if there are any events
     if "N/A" not in embed.description:
