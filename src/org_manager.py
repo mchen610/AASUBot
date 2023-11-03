@@ -10,13 +10,8 @@ from dateutil.parser import parse as date_parse
 from event import Event, EventList
 from weather import set_weather_footer
 from system_messages import get_error_msg
-from times import before_midnight as loop_time
-from times import est
+from times import est, midnight as loop_time
 
-
-est = timezone(timedelta(hours=-4))
-midnight = time(5, 3, 0, 0, est)
-before_midnight = time(5, 2, 0, 0, est)
 
 
 class SubOrg:
@@ -85,6 +80,7 @@ class SubOrgManager:
         self.google_service = google_service
         self.lat = lat
         self.lon = lon
+        self.iter = 0
 
     def clear_events(self):
         """Clears every SubOrg instance's event list."""
@@ -94,10 +90,14 @@ class SubOrgManager:
     @tasks.loop(time=loop_time)
     async def pull_events(self):
         """Updates events in each SubOrg instance every 24 hours at 12 A.M. in case any events were created or updated"""
+        
 
         self.clear_events()
 
-        today = datetime.utcnow() + timedelta(hours=1)
+        # Must input 5 A.M. UTC to Google Calendar to read as 12 A.M. EST on the same day. 
+        today = datetime.utcnow()
+        today = today.replace(hour = 5, minute = 0, second = 0)
+
         time_min = today.isoformat() + 'Z'
         time_max = (today + timedelta(days=90)).isoformat() + 'Z'
         

@@ -40,6 +40,7 @@ async def events(ctx, organization: str, days: int):
     org_name = organization.upper()
     embed = AASUManager.embed(org_name, days)
     await ctx.respond(embed=embed)
+    print(AASUManager.get('AASU'))
 
 
 @bot.command(description="Get a description of all the commands.")
