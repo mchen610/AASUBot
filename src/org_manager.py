@@ -91,12 +91,10 @@ class SubOrgManager:
     async def pull_events(self):
         """Updates events in each SubOrg instance every 24 hours at 12 A.M. in case any events were created or updated"""
         
-
         self.clear_events()
 
-        # Must input 5 A.M. UTC to Google Calendar to read as 12 A.M. EST on the same day. 
+        # Google Calendar requires UTC.
         today = datetime.utcnow()
-        today = today.replace(hour = 5, minute = 0, second = 0)
 
         time_min = today.isoformat() + 'Z'
         time_max = (today + timedelta(days=90)).isoformat() + 'Z'
