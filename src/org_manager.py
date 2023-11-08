@@ -10,7 +10,7 @@ from dateutil.parser import parse as date_parse
 from event import Event, EventList
 from weather import set_weather_footer
 from system_messages import get_error_msg
-from times import est, get_utc_offset, midnight as loop_time
+from times import est, get_utc_offset, get_offset_naive_time
 
 
 
@@ -87,16 +87,14 @@ class SubOrgManager:
         for org in self.orgs.values():
             org.event_list.clear()
 
-    @tasks.loop(time=loop_time)
+    @tasks.loop(time=get_offset_naive_time(0))
     async def pull_events(self):
         """Updates events in each SubOrg instance every 24 hours at 12 A.M. in case any events were created or updated"""
         
         self.clear_events()
 
         # Google Calendar requires UTC. Use local time's UTC offset to ensure correct date.
-        today = datetime.utcnow()
-        utc_offset = get_utc_offset(est)
-        today = today.replace(hour=utc_offset)
+        today = datetime.utcnow() + timedelta(seconds=1)
 
         time_min = today.isoformat() + 'Z'
         time_max = (today + timedelta(days=90)).isoformat() + 'Z'

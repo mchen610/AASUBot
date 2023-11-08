@@ -16,10 +16,10 @@ from system_messages import send_error_msg, send_pending_msg, send_success_msg
 from weather import get_weather_msg
 from config import google_service
 from org_manager import SubOrg, SubOrgManager
-from times import eight_am as loop_time
+from times import get_offset_naive_time
 from firebase_admin import db
 
-#SUBORGMANAGER CONFIG
+# SubOrgManager Config
 # Initialize the organizations with their name, color, instagram handle, an image link of their logo, and any related keywords to search for when pulling events
 orgs = {
         'AASU': SubOrg('Asian American Student Union', Color.dark_magenta(), 'ufaasu', 'https://i.imgur.com/i6fTLuY.png'),
@@ -71,7 +71,7 @@ async def disc(ctx: Context):
         await send_error_msg(ctx, "You are already unsubscribed.")
 
 
-@tasks.loop(time=loop_time)
+@tasks.loop(time=get_offset_naive_time(8))
 async def send_daily_discord():
     """Scheduled task to send daily Discord notifications to valid users.
 
@@ -228,7 +228,7 @@ async def verify(ctx, code: Option(str, "6-digit code", min_length=6, max_length
         await send_error_msg(ctx, "Please begin verification using `/subscribe sms`.")
 
 
-@tasks.loop(time=loop_time)
+@tasks.loop(time=get_offset_naive_time(8))
 async def send_daily_sms():
     events_msg = AASUManager.get('AASU').event_list.events_until(1).sms_str()
 
