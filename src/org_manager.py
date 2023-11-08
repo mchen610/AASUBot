@@ -4,13 +4,13 @@ from googleapiclient.discovery import Resource
 from discord import Color, Embed
 from discord.ext import tasks
 
-from datetime import time, datetime, timedelta, timezone
+from datetime import time, datetime, timedelta
 from dateutil.parser import parse as date_parse
 
 from event import Event, EventList
 from weather import set_weather_footer
 from system_messages import get_error_msg
-from times import est, midnight as loop_time
+from times import est, get_utc_offset, midnight as loop_time
 
 
 
@@ -93,8 +93,9 @@ class SubOrgManager:
         
         self.clear_events()
 
-        # Google Calendar requires UTC.
+        # Google Calendar requires UTC. Use local time's UTC offset to ensure correct date.
         today = datetime.utcnow()
+        today.hour = get_utc_offset(today)
 
         time_min = today.isoformat() + 'Z'
         time_max = (today + timedelta(days=90)).isoformat() + 'Z'
