@@ -95,7 +95,7 @@ class SubOrgManager:
 
         # Google Calendar requires UTC. Use local time's UTC offset to ensure correct date.
         today = datetime.utcnow()
-        utc_offset = get_utc_offset(today)
+        utc_offset = get_utc_offset(est)
         today = today.replace(hour=utc_offset)
 
         time_min = today.isoformat() + 'Z'
