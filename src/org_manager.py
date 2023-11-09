@@ -10,7 +10,7 @@ from dateutil.parser import parse as date_parse
 from event import Event, EventList
 from weather import set_weather_footer
 from system_messages import get_error_msg
-from times import est, get_utc_offset, get_offset_naive_time
+from times import bot_tz, get_offset_naive_time
 
 
 
@@ -58,7 +58,7 @@ class SubOrg:
             event_list = self.event_list.events_until(days)
             
             embed = Embed(title=header, description=event_list.to_markdown(), color=self.color, timestamp=datetime.now())
-            embed.set_author(name=f"Today is {datetime.now(tz=est).strftime('%A, %b %d')}.")
+            embed.set_author(name=f"Today is {datetime.now(tz=bot_tz).strftime('%A, %b %d')}.")
             embed.set_thumbnail(url=self.img_url)
             set_weather_footer(embed, lat, lon)
 

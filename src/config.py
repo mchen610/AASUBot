@@ -23,6 +23,8 @@ FIREBASE_REALTIME_DATABASE_URL = os.environ['FIREBASE_REALTIME_DATABASE_URL']
 # Discord config
 intents = discord.Intents(members=True, message_content=True)
 bot = discord.Bot(intents=intents, activity=discord.Activity(type=3, name="/help"), status=discord.Status.online)
+
+# Task times config
 def reminder_time(): return get_offset_naive_time(8)
 def pull_events_time(): return get_offset_naive_time(0)
 def dst_reset_time(): return get_offset_naive_time(2)
