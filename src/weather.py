@@ -1,5 +1,7 @@
 from config import WEATHER_API_KEY
 import requests
+from datetime import datetime
+from times import bot_tz
 from discord import Embed
 
 _emojis = {
@@ -90,6 +92,12 @@ def get_weather_msg(lat: float, lon: float):
     weather_msg = f"{emoji} {desc}: it's {temp}°F {temp_emoji}"
     return weather_msg
 
+def get_weather_embed(lat: float, lon: float):
+    msg = get_weather_msg(lat, lon)
+    embed = Embed(title="Weather", description=msg, color=0x000000, timestamp=datetime.now())
+    embed.set_author(name=f"Today is {datetime.now(tz=bot_tz).strftime('%A, %b %d')}.")
+    return embed
+
 def set_weather_footer(embed: Embed, lat: float, lon: float):
     weather = get_weather(lat, lon)
     desc = weather["desc"]
@@ -98,3 +106,4 @@ def set_weather_footer(embed: Embed, lat: float, lon: float):
     temp_emoji = weather["temp_emoji"]
 
     embed.set_footer(text=f"{desc}: it's {temp}°F {temp_emoji}", icon_url=icon_url)
+

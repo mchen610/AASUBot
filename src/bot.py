@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, time
 from config import DISCORD_TOKEN, bot, reminder_time, pull_events_time, dst_reset_time
 from bot_config import *
 from times import bot_tz
+from weather import get_weather_embed
 
 
 @bot.event
@@ -16,7 +17,8 @@ async def on_ready():
     send_daily_sms.start()
     send_daily_discord.start()
     reset_tasks_dst.start()
-        
+
+
 @tasks.loop(time=dst_reset_time())
 async def reset_tasks_dst():
     """Resets the task loops when daylight savings time starts or ends."""
@@ -28,6 +30,7 @@ async def reset_tasks_dst():
         send_daily_discord.change_interval(reminder_time())
         AASUManager.pull_events.change_interval(pull_events_time())
         reset_tasks_dst.change_interval(dst_reset_time())
+
 
 @bot.command(
     description="Get events within the next 30 days or specify a sub-organization and/or timeframe.",
@@ -45,16 +48,21 @@ async def reset_tasks_dst():
             description="Get events within x number of days.",
             default=30,
             min_value=1,
-            max_value=90
-        )
-    ]
+            max_value=90,
+        ),
+    ],
 )
 async def events(ctx, organization: str, days: int):
     """Fetch and display events from a specified sub-organization within a given timeframe."""
     org_name = organization.upper()
     embed = AASUManager.embed(org_name, days)
     await ctx.respond(embed=embed)
-    print(AASUManager.get('AASU'))
+    print(AASUManager.get("AASU"))
+
+
+@bot.command(description="Get the current weather.")
+async def weather(ctx):
+    await ctx.respond(embed=get_weather_embed(AASUManager.lat, AASUManager.lon))
 
 
 @bot.command(description="Get a description of all the commands.")
@@ -80,5 +88,6 @@ async def help(ctx):
     )
     embed.set_thumbnail(url=AASUManager.orgs[AASUManager.default_org].img_url)
     await ctx.respond(embed=embed)
+
 
 bot.run(DISCORD_TOKEN)
