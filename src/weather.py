@@ -2,7 +2,7 @@ from config import WEATHER_API_KEY
 import requests
 from datetime import datetime
 from times import bot_tz
-from discord import Embed
+from discord import Embed, Color
 
 _emojis = {
     "01d": "☀️",
@@ -94,7 +94,7 @@ def get_weather_msg(lat: float, lon: float):
 
 def get_weather_embed(lat: float, lon: float):
     msg = get_weather_msg(lat, lon)
-    embed = Embed(title="Weather", description=msg, color=0x000000, timestamp=datetime.now())
+    embed = Embed(title="Weather", description=msg, timestamp=datetime.now())
     embed.set_author(name=f"Today is {datetime.now(tz=bot_tz).strftime('%A, %b %d')}.")
     return embed
 

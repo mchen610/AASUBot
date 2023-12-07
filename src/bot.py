@@ -62,7 +62,8 @@ async def events(ctx, organization: str, days: int):
 
 @bot.command(description="Get the current weather.")
 async def weather(ctx):
-    await ctx.respond(embed=get_weather_embed(AASUManager.lat, AASUManager.lon))
+    embed = get_weather_embed(AASUManager.lat, AASUManager.lon)
+    await ctx.respond(embed=embed)
 
 
 @bot.command(description="Get a description of all the commands.")
