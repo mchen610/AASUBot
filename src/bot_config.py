@@ -135,7 +135,7 @@ async def delete_last_daily(user: User):
 # --- SMS FUNCTIONS --- #
 
 @subscribe.command(description="Subscribe to event reminders via SMS.")
-async def sms(ctx: Context, number: Option(str, "Your phone number"), country_code: Option(str, "Your country code (default is '+1' for USA)", default="+1")):
+async def sms(ctx: Context, number: Option(str, "Your phone number"), country_code: Option(str, "Your country code (default is '+1' for USA)", default="+1")): # type: ignore
     user = ctx.author
     user_id = str(user.id)
     number = country_code + number
@@ -184,7 +184,7 @@ async def sms(ctx: Context):
 
 
 @bot.command(description="Verify your phone number with the 6-digit code.")
-async def verify(ctx, code: Option(str, "6-digit code", min_length=6, max_length=6)):
+async def verify(ctx, code: Option(str, "6-digit code", min_length=6, max_length=6)): # type: ignore
     user = ctx.author
     user_id = str(user.id)
 
