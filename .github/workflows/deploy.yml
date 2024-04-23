@@ -19,7 +19,7 @@ jobs:
           SOURCE: "./"
           REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
           REMOTE_USER: ${{ secrets.REMOTE_USER }}
-          TARGET: "/home/ec2-user/aasu-bot"
+          TARGET: "/home/ec2-user/"
 
       - name: Execute Python script
         uses: appleboy/ssh-action@master
