@@ -79,7 +79,7 @@ def get_weather(lat: float, lon: float):
         }
     
     except Exception:
-        return {"temp": "80", "desc": "It's normal I hope (I messed up)", "icon_url": "http://openweathermap.org/img/wn/04d.png", "emoji": "☁️", "temp_emoji": "😌"}
+        return {"temp": "0", "desc": "Error", "icon_url": "http://openweathermap.org/img/wn/04d.png", "emoji": "☁️", "temp_emoji": "😌"}
 
 
 def get_weather_msg(lat: float, lon: float):
