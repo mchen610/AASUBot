@@ -57,7 +57,6 @@ def temp_emoji(temp: float):
     elif temp < 50:
         return "🧊"
 
-
 def get_weather(lat: float, lon: float):
     response = requests.get(
         f"https://api.openweathermap.org/data/2.5/onecall?lat={lat}&lon={lon}&exclude=minutely,hourly&appid={WEATHER_API_KEY}&units=imperial"
