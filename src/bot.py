@@ -1,10 +1,9 @@
 import discord
 from discord.commands import Option
 from discord.ext import tasks
-from datetime import datetime, timedelta, time
-
+from datetime import datetime, timedelta
 from config import DISCORD_TOKEN, bot, reminder_time, pull_events_time, dst_reset_time
-from bot_config import *
+from bot_config import AASUManager, send_daily_discord, send_daily_sms
 from times import bot_tz
 from weather import get_weather_embed
 

@@ -4,7 +4,7 @@ from googleapiclient.discovery import Resource
 from discord import Color, Embed
 from discord.ext import tasks
 
-from datetime import time, datetime, timedelta
+from datetime import datetime, timedelta
 from dateutil.parser import parse as date_parse
 
 from event import Event, EventList
@@ -114,7 +114,7 @@ class SubOrgManager:
                         if org.name == self.default_org or org.keywords & set(event_name.split()):
                             org.event_list.add(new_event)
 
-            except:
+            except Exception:
                 pass
 
     def embed(self, org_name: str = None, days: int = 7):

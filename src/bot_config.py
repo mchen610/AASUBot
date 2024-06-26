@@ -40,7 +40,7 @@ unsubscribe = bot.create_group("unsubscribe", "Unsubscribe from event reminders.
 # --- DISCORD FUNCTIONS --- #
 
 @subscribe.command(description="Subscribe to event reminders via Discord.", name="discord")
-async def disc(ctx: Context):
+async def subscribe_discord(ctx: Context):
     user = ctx.author
     user_id = str(user.id)
     valid_users_ref = db.reference('discord/valid_users')
@@ -56,7 +56,7 @@ async def disc(ctx: Context):
 
 
 @unsubscribe.command(description="Unsubscribe from Discord event reminders.", name="discord")
-async def disc(ctx: Context):
+async def unsubscribe_discord(ctx: Context):
     user = ctx.author
     user_id = str(user.id)
     ref = db.reference('discord/valid_users')
@@ -67,7 +67,7 @@ async def disc(ctx: Context):
         ref.set(valid_users)        
         await send_success_msg(ctx, "You are now unsubscribed.")
 
-    except:
+    except Exception:
         await send_error_msg(ctx, "You are already unsubscribed.")
 
 
@@ -129,20 +129,20 @@ async def delete_last_daily(user: User):
     try:
         if "AASU Daily" in str(history[0].embeds[0].title):
             await history[0].delete()
-    except:
+    except Exception:
         pass
 
 # --- SMS FUNCTIONS --- #
 
 @subscribe.command(description="Subscribe to event reminders via SMS.")
-async def sms(ctx: Context, number: Option(str, "Your phone number"), country_code: Option(str, "Your country code (default is '+1' for USA)", default="+1")): # type: ignore
+async def subscribe_sms(ctx: Context, number: Option(str, "Your phone number"), country_code: Option(str, "Your country code (default is '+1' for USA)", default="+1")): # type: ignore
     user = ctx.author
     user_id = str(user.id)
     number = country_code + number
 
     try:    
         is_valid_number = phonenumbers.is_possible_number(phonenumbers.parse(number)) and twilio_client.lookups.v2.phone_numbers(number).fetch().valid
-    except:
+    except Exception:
         is_valid_number = False
 
     if is_valid_number:
@@ -166,7 +166,7 @@ async def sms(ctx: Context, number: Option(str, "Your phone number"), country_co
 
 
 @unsubscribe.command(description="Unsubscribe from SMS event reminders.")
-async def sms(ctx: Context):
+async def unsubscribe_sms(ctx: Context):
     user = ctx.author
     user_id = str(user.id)
 
