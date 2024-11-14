@@ -2,7 +2,7 @@ from config import WEATHER_API_KEY
 import requests
 from datetime import datetime
 from times import bot_tz
-from discord import Embed, Color
+from discord import Embed
 
 _emojis = {
     "01d": "☀️",

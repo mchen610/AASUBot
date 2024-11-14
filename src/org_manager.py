@@ -8,9 +8,10 @@ from datetime import datetime, timedelta
 from dateutil.parser import parse as date_parse
 
 from event import Event, EventList
-from weather import set_weather_footer
+from singleton import SingletonMeta
+from weather_service import set_weather_footer
 from system_messages import get_error_msg
-from times import bot_tz, get_offset_naive_time
+from times import bot_tz, get_time
 
 
 
@@ -72,7 +73,7 @@ class SubOrg:
         event_list = self.event_list.events_until(days)
         return f"{header}\n\n{event_list}"
 
-class SubOrgManager:
+class SubOrgManager(metaclass=SingletonMeta):
     def __init__(self, orgs: dict[str, SubOrg], default_org: str, calendar_id: str, google_service: Resource, lat: float, lon: float):
         self.orgs = orgs
         self.default_org = default_org
@@ -87,7 +88,7 @@ class SubOrgManager:
         for org in self.orgs.values():
             org.event_list.clear()
 
-    @tasks.loop(time=get_offset_naive_time(0))
+    @tasks.loop(time=get_time(0))
     async def pull_events(self):
         """Updates events in each SubOrg instance every 24 hours at 12 A.M. in case any events were created or updated"""
         
@@ -131,11 +132,3 @@ class SubOrgManager:
     
     def __getitem__(self, org_name) -> Optional[SubOrg]:
         return self.get(org_name)
-    
-    def str(self):
-        string = ''
-        for org in self.orgs.values():
-            string = string + str(org) + '\n'
-        return string[:-1]
- 
-    

@@ -1,11 +1,9 @@
 import discord
 from discord.commands import Option
-from discord.ext import tasks
-from datetime import datetime, timedelta
-from config import DISCORD_TOKEN, bot, reminder_time, pull_events_time, dst_reset_time
+from datetime import datetime
+from config import DISCORD_TOKEN, bot
 from bot_config import AASUManager, send_daily_discord, send_daily_sms
-from times import bot_tz
-from weather import get_weather_embed
+from weather_service import get_weather_embed
 
 
 @bot.event
@@ -15,20 +13,6 @@ async def on_ready():
     AASUManager.pull_events.start()
     send_daily_sms.start()
     send_daily_discord.start()
-    reset_tasks_dst.start()
-
-
-@tasks.loop(time=dst_reset_time())
-async def reset_tasks_dst():
-    """Resets the task loops when daylight savings time starts or ends."""
-
-    today = datetime.now(bot_tz) + timedelta(seconds=1)
-    yesterday = today - timedelta(hours=24)
-    if today.dst() != yesterday.dst():
-        send_daily_sms.change_interval(reminder_time())
-        send_daily_discord.change_interval(reminder_time())
-        AASUManager.pull_events.change_interval(pull_events_time())
-        reset_tasks_dst.change_interval(dst_reset_time())
 
 
 @bot.command(

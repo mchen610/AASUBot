@@ -6,32 +6,38 @@ from discord.ext import tasks
 from discord.ext.commands import Context
 from config import bot
 
-# Phone number verification imports
-from twilio.base.exceptions import TwilioRestException
-import phonenumbers
-from config import verify_service, twilio_client, TWILIO_PHONE_NUMBER
+# Twilio service import
+from twilio_service import TwilioService
 
 # Utility imports
 from system_messages import send_error_msg, send_pending_msg, send_success_msg
-from weather import get_weather_msg
+from weather_service import get_weather_msg
 from config import google_service
 from org_manager import SubOrg, SubOrgManager
-from times import get_offset_naive_time
-from firebase_admin import db
+from times import get_time
+
+# Import the DBService class
+from db_service import DBService
 
 # SubOrgManager Config
-# Initialize the organizations with their name, color, instagram handle, an image link of their logo, and any related keywords to search for when pulling events
+# Initialize the organizations with their name, color, Instagram handle, an image link of their logo, and any related keywords to search for when pulling events
 orgs = {
-        'AASU': SubOrg('Asian American Student Union', Color.dark_magenta(), 'ufaasu', 'https://i.imgur.com/i6fTLuY.png'),
-        'CASA': SubOrg('Chinese American Student Association', Color.yellow(), 'ufcasa', 'https://i.imgur.com/R9oWQ8Z.png'),
-        'HEAL': SubOrg('Health Educated Asian Leaders', Color.green(), 'ufheal', 'https://i.imgur.com/gvdij9i.png'),
-        'KUSA': SubOrg('Korean Undergraduate Student Association', Color.blue(), 'ufkusa', 'https://i.imgur.com/zNME2LE.png'),
-        'FSA': SubOrg('Filipino Student Association', Color.red(), 'uffsa', 'https://i.imgur.com/SHNdQTR.png', {'FAHM'}),
-        'FLP': SubOrg('First-Year Leadership Program', Color.from_rgb(150, 200, 255), 'ufflp', 'https://i.imgur.com/LtJnLWk.png'),
-        'VSO': SubOrg('Vietnamese Student Organization', Color.gold(), 'ufvso', 'https://i.imgur.com/7GvIPS4.png')
+    'AASU': SubOrg('Asian American Student Union', Color.dark_magenta(), 'ufaasu', 'https://i.imgur.com/i6fTLuY.png'),
+    'CASA': SubOrg('Chinese American Student Association', Color.yellow(), 'ufcasa', 'https://i.imgur.com/R9oWQ8Z.png'),
+    'HEAL': SubOrg('Health Educated Asian Leaders', Color.green(), 'ufheal', 'https://i.imgur.com/gvdij9i.png'),
+    'KUSA': SubOrg('Korean Undergraduate Student Association', Color.blue(), 'ufkusa', 'https://i.imgur.com/zNME2LE.png'),
+    'FSA': SubOrg('Filipino Student Association', Color.red(), 'uffsa', 'https://i.imgur.com/SHNdQTR.png', {'FAHM'}),
+    'FLP': SubOrg('First-Year Leadership Program', Color.from_rgb(150, 200, 255), 'ufflp', 'https://i.imgur.com/LtJnLWk.png'),
+    'VSO': SubOrg('Vietnamese Student Organization', Color.gold(), 'ufvso', 'https://i.imgur.com/7GvIPS4.png')
 }
 
 AASUManager = SubOrgManager(orgs, 'AASU', 'aasu.uf@gmail.com', google_service, lat=29.65, lon=-82.34)
+
+# Create an instance of DBService
+db_service = DBService()
+
+# Create an instance of TwilioService
+twilio_service = TwilioService()
 
 # Command groups
 subscribe = bot.create_group("subscribe", "Subscribe to event reminders.")
@@ -43,15 +49,13 @@ unsubscribe = bot.create_group("unsubscribe", "Unsubscribe from event reminders.
 async def subscribe_discord(ctx: Context):
     user = ctx.author
     user_id = str(user.id)
-    valid_users_ref = db.reference('discord/valid_users')
-    valid_users = valid_users_ref.get() or {}
+    valid_users = db_service.get_discord_valid_users()
 
     if user_id in valid_users:
         await send_error_msg(ctx, "You are already subscribed!")
-
     else:
         valid_users[user_id] = user.name
-        valid_users_ref.set(valid_users)
+        db_service.set_discord_valid_users(valid_users)
         await send_success_msg(ctx, "You are now subscribed!")
 
 
@@ -59,26 +63,19 @@ async def subscribe_discord(ctx: Context):
 async def unsubscribe_discord(ctx: Context):
     user = ctx.author
     user_id = str(user.id)
-    ref = db.reference('discord/valid_users')
-    valid_users = ref.get()
+    valid_users = db_service.get_discord_valid_users()
 
     try:
         del valid_users[user_id]
-        ref.set(valid_users)        
+        db_service.set_discord_valid_users(valid_users)
         await send_success_msg(ctx, "You are now unsubscribed.")
-
-    except Exception:
+    except KeyError:
         await send_error_msg(ctx, "You are already unsubscribed.")
 
 
-@tasks.loop(time=get_offset_naive_time(8))
+@tasks.loop(time=get_time(8))
 async def send_daily_discord():
-    """Scheduled task to send daily Discord notifications to valid users.
-
-    This task fetches an embed of 'AASU' events on the current day. If the task
-    fails to fetch a user, that user is moved to an 'invalid_users' dict.
-
-    """
+    """Scheduled task to send daily Discord notifications to valid users."""
 
     # Fetch embed for 'AASU' events within 1 day (today)
     embed = AASUManager.embed('AASU', days=1)
@@ -86,35 +83,29 @@ async def send_daily_discord():
     # Check if there are any events
     if "N/A" not in embed.description:
         embed.title = "__AASU Daily__"
-        
-        # Fetch valid users dictionary from Firebase Realtime Database
-        valid_users_ref = db.reference('discord/valid_users')
-        valid_users = valid_users_ref.get() or {}
 
-        # Fetch invalid users dictionary from Firebase Realtime Database
-        invalid_users_ref = db.reference('discord/invalid_users')
-        invalid_users = invalid_users_ref.get() or {}
+        # Fetch valid and invalid users from the database
+        valid_users = db_service.get_discord_valid_users()
+        invalid_users = db_service.get_discord_invalid_users()
 
         # Send every valid user the embed and handle newly invalid users
-        # Use list() to generate a copy of the keys to avoid complications from deleting during the loop
         for user_id in list(valid_users.keys()):
-            try:    
-                user = await bot.get_or_fetch_user(user_id)
-                
+            try:
+                user = await bot.get_or_fetch_user(int(user_id))
+
                 # Deletes the last daily message in message history (if any)
                 await delete_last_daily(user)
 
                 await user.send(embed=embed)
-            
-            # Handles errors if user can no longer be accessed (errors.Forbidden) or can no longer be found (AttributeError)
-            # Transfers the user information from valid users to invalid users
+
+            # Handles errors if user can no longer be accessed
             except (errors.Forbidden, AttributeError):
                 invalid_users[user_id] = valid_users[user_id]
                 del valid_users[user_id]
 
         # Update data on Firebase Realtime Database
-        invalid_users_ref.set(invalid_users)
-        valid_users_ref.set(valid_users)
+        db_service.set_discord_valid_users(valid_users)
+        db_service.set_discord_invalid_users(invalid_users)
 
 
 async def delete_last_daily(user: User):
@@ -135,32 +126,23 @@ async def delete_last_daily(user: User):
 # --- SMS FUNCTIONS --- #
 
 @subscribe.command(description="Subscribe to event reminders via SMS.")
-async def subscribe_sms(ctx: Context, number: Option(str, "Your phone number"), country_code: Option(str, "Your country code (default is '+1' for USA)", default="+1")): # type: ignore
+async def subscribe_sms(ctx: Context, number: Option(str, "Your phone number"), country_code: Option(str, "Your country code (default is '+1' for USA)", default="+1")):
     user = ctx.author
     user_id = str(user.id)
     number = country_code + number
 
-    try:    
-        is_valid_number = phonenumbers.is_possible_number(phonenumbers.parse(number)) and twilio_client.lookups.v2.phone_numbers(number).fetch().valid
-    except Exception:
-        is_valid_number = False
-
-    if is_valid_number:
-        verified_users = db.reference('sms/verified_users').get() or {}
+    if twilio_service.is_valid_phone_number(number):
+        verified_users = db_service.get_sms_verified_users()
 
         if user_id in verified_users:
             await send_error_msg(ctx, "You are already subscribed via SMS!")
-
         else:
-            pending_users_ref = db.reference('sms/pending_users')
-            pending_users = pending_users_ref.get() or {}
-
+            pending_users = db_service.get_sms_pending_users()
             pending_users[user_id] = number
-            pending_users_ref.set(pending_users)
-            
-            verify_service.verifications.create(to=number, channel='sms')
-            await send_pending_msg(ctx, "Please enter the verification code sent to your phone number using `/verify`.")
-            
+            db_service.set_sms_pending_users(pending_users)
+
+            twilio_service.send_verification_code(number)
+            await send_pending_msg(ctx, "Please enter the verification code sent to your phone number using /verify.")
     else:
         await send_error_msg(ctx, "Invalid phone number.")
 
@@ -170,65 +152,49 @@ async def unsubscribe_sms(ctx: Context):
     user = ctx.author
     user_id = str(user.id)
 
-    verified_users_ref = db.reference('sms/verified_users')
-    verified_users = verified_users_ref.get() or {}
+    verified_users = db_service.get_sms_verified_users()
 
     if user_id in verified_users:
         del verified_users[user_id]
-        verified_users_ref.set(verified_users)
-
+        db_service.set_sms_verified_users(verified_users)
         await send_success_msg(ctx, "You are now unsubscribed from SMS reminders.")
-
     else:
         await send_error_msg(ctx, "You are already unsubscribed from SMS reminders.")
 
 
 @bot.command(description="Verify your phone number with the 6-digit code.")
-async def verify(ctx, code: Option(str, "6-digit code", min_length=6, max_length=6)): # type: ignore
+async def verify(ctx, code: Option(str, "6-digit code", min_length=6, max_length=6)):
     user = ctx.author
     user_id = str(user.id)
 
-    verified_users_ref = db.reference('sms/verified_users')
-    verified_users = verified_users_ref.get() or {}
-
-    pending_users_ref = db.reference('sms/pending_users')
-    pending_users = pending_users_ref.get() or {}
+    verified_users = db_service.get_sms_verified_users()
+    pending_users = db_service.get_sms_pending_users()
 
     if user_id in pending_users:
         if code.isnumeric():
             verifying_number = pending_users[user_id]
-            try:
+            is_approved = twilio_service.check_verification_code(verifying_number, code)
 
-                # Attempt verification with Twilio
-                result = verify_service.verification_checks.create(to=verifying_number, code=code)
+            if is_approved:
+                # Transfer user from pending users to verified users
+                verified_users[user_id] = verifying_number
+                del pending_users[user_id]
 
-                if result.status == 'approved':
+                db_service.set_sms_verified_users(verified_users)
+                db_service.set_sms_pending_users(pending_users)
 
-                    # Transfer user from verified users to pending users
-                    verified_users[user_id] = verifying_number
-                    del pending_users[user_id]
-
-                    verified_users_ref.set(verified_users)
-                    pending_users_ref.set(pending_users)
-
-                    await send_success_msg(ctx, "You are now subscribed via SMS!")
-                    
-                else:
-                    await send_error_msg(ctx, "Invalid key. Please try again.")
-                    
-            except TwilioRestException:
-                await send_error_msg(ctx, "Your time has passed. Please restart verification using `/subscribe sms`.")
+                await send_success_msg(ctx, "You are now subscribed via SMS!")
+            else:
+                await send_error_msg(ctx, "Invalid code. Please try again.")
         else:
-            await send_error_msg(ctx, "Invalid key. Please make sure you enter the 6-digit key sent to your phone!")
-            
+            await send_error_msg(ctx, "Invalid code. Please make sure you enter the 6-digit code sent to your phone!")
     elif user_id in verified_users:
         await send_error_msg(ctx, "You are already subscribed via SMS!")
-
     else:
-        await send_error_msg(ctx, "Please begin verification using `/subscribe sms`.")
+        await send_error_msg(ctx, "Please begin verification using /subscribe sms.")
 
 
-@tasks.loop(time=get_offset_naive_time(8))
+@tasks.loop(time=get_time(8))
 async def send_daily_sms():
     events_msg = AASUManager.get('AASU').event_list.events_until(1).sms_str()
 
@@ -237,27 +203,16 @@ async def send_daily_sms():
         header = f"✨ Events today, {today} ✨"
         complete_msg = f"{header.center(30, '_')}\n{events_msg}\n{get_weather_msg(AASUManager.lat, AASUManager.lon)}"
 
-        verified_users_ref = db.reference('sms/verified_users')
-        verified_users = verified_users_ref.get() or {}
-
-        invalid_users_ref = db.reference('sms/invalid_users')
-        invalid_users = invalid_users_ref.get() or {}
+        verified_users = db_service.get_sms_verified_users()
+        invalid_users = db_service.get_sms_invalid_users()
 
         for user_id in list(verified_users.keys()):
-            try:
-                twilio_client.messages \
-                    .create(
-                        body=complete_msg,
-                        from_ =  TWILIO_PHONE_NUMBER,
-                        to = verified_users[user_id]
-                    )
-            except TwilioRestException:
-                invalid_users[user_id] = verified_users[user_id]
+            to_number = verified_users[user_id]
+            message_sid = twilio_service.send_sms(to_number, complete_msg)
+            if not message_sid:
+                # If sending SMS failed, move user to invalid users
+                invalid_users[user_id] = to_number
                 del verified_users[user_id]
 
-        verified_users_ref.set(verified_users)
-        invalid_users_ref.set(invalid_users)
-        
-
-
-
+        db_service.set_sms_verified_users(verified_users)
+        db_service.set_sms_invalid_users(invalid_users)

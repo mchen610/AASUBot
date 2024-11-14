@@ -3,11 +3,11 @@ import os
 
 import discord
 from twilio.rest import Client
-import firebase_admin
-from firebase_admin import credentials
-from googleapiclient.discovery import build, Resource
 
-from times import get_offset_naive_time
+from googleapiclient.discovery import build, Resource
+import zoneinfo
+
+bot_tz = zoneinfo.ZoneInfo('America/New_York')
 
 load_dotenv()
 GOOGLE_CALENDAR_API_KEY = os.environ['GOOGLE_CALENDAR_API_KEY']
@@ -25,18 +25,10 @@ intents = discord.Intents(members=True, message_content=True)
 bot = discord.Bot(intents=intents, activity=discord.Activity(type=3, name="/help"), status=discord.Status.online)
 
 # Task times config
-def reminder_time(): return get_offset_naive_time(8)
-def pull_events_time(): return get_offset_naive_time(0)
-def dst_reset_time(): return get_offset_naive_time(2)
-
 
 # Twilio config
 twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 verify_service = twilio_client.verify.v2.services(TWILIO_VERIFY_SID)
-
-# Firebase config
-cred = credentials.Certificate("service_account_key.json") 
-firebase_admin.initialize_app(cred, {"databaseURL": FIREBASE_REALTIME_DATABASE_URL})
 
 # Google Calendar config
 google_service: Resource = build('calendar', 'v3', developerKey=GOOGLE_CALENDAR_API_KEY)
